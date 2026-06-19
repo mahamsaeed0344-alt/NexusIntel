@@ -1,5 +1,5 @@
 {
-  "buildAptPackages": {
-    "cmake": "*"
-  }
+  "buildAptPackages": [
+    "cmake"
+  ]
 }
