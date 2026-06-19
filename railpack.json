@@ -1,6 +1,5 @@
 {
-  "$schema": "https://railpack.com/schema.json",
-  "packages": [
-    "cmake"
-  ]
+  "buildAptPackages": {
+    "cmake": "*"
+  }
 }
