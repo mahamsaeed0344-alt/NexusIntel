@@ -1,0 +1,85 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="row g-3">
+  <div class="col-lg-5">
+    <div class="panel">
+      <div class="panel-head">FACE COMPARISON TOOL</div>
+      <form method="post" enctype="multipart/form-data">
+        <div class="mb-3">
+          <label>Image 1 — First Person</label>
+          <input class="form-control mt-1" type="file" name="face1" accept="image/*" required>
+        </div>
+        <div class="mb-3">
+          <label>Image 2 — Second Person</label>
+          <input class="form-control mt-1" type="file" name="face2" accept="image/*" required>
+        </div>
+        <button class="btn btn-cyber w-100">⚖ Compare Faces</button>
+      </form>
+      <hr>
+      <div style="color:var(--muted2);font-size:.82rem;line-height:1.8">
+        <div>📏 <b>Distance</b> — 0.0 = identical, 0.6+ = different person</div>
+        <div>🎯 <b>Similarity</b> — % chance same person</div>
+        <div>✅ <b>Match threshold:</b> {{ '%.2f'|format(0.45) }} distance</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-lg-7">
+    {% if result %}
+    <div class="panel">
+      <div class="panel-head">COMPARISON RESULT</div>
+      <div class="row g-3 mb-3">
+        <div class="col-6">
+          <div style="color:var(--muted2);font-size:.72rem;letter-spacing:1px;text-transform:uppercase;margin-bottom:6px">IMAGE 1</div>
+          <img src="data:image/jpeg;base64,{{ result.img1_b64 }}" class="img-fluid rounded" style="border:1px solid var(--border);max-height:220px;width:100%;object-fit:cover">
+          <div style="color:var(--muted2);font-size:.75rem;margin-top:4px">{{ result.faces1 }} face(s) detected</div>
+        </div>
+        <div class="col-6">
+          <div style="color:var(--muted2);font-size:.72rem;letter-spacing:1px;text-transform:uppercase;margin-bottom:6px">IMAGE 2</div>
+          <img src="data:image/jpeg;base64,{{ result.img2_b64 }}" class="img-fluid rounded" style="border:1px solid var(--border);max-height:220px;width:100%;object-fit:cover">
+          <div style="color:var(--muted2);font-size:.75rem;margin-top:4px">{{ result.faces2 }} face(s) detected</div>
+        </div>
+      </div>
+
+      <!-- Big result indicator -->
+      <div style="text-align:center;padding:24px;background:{{ 'rgba(255,23,68,.08)' if result.match else 'rgba(0,230,118,.06)' }};border-radius:14px;border:1px solid {{ 'rgba(255,23,68,.3)' if result.match else 'rgba(0,230,118,.2)' }};margin-bottom:16px">
+        <div style="font-size:3rem">{{ '🔴 SAME PERSON' if result.match else '🟢 DIFFERENT PEOPLE' }}</div>
+        <div style="font-family:'Orbitron',monospace;font-size:2rem;font-weight:900;margin-top:8px;color:{{ '#ff5252' if result.match else '#00e676' }}">
+          {{ result.similarity }}% similar
+        </div>
+      </div>
+
+      <!-- Metrics -->
+      <div class="row g-3">
+        <div class="col-6">
+          <div style="background:rgba(0,0,0,.2);border-radius:10px;padding:14px;border:1px solid var(--border)">
+            <div style="color:var(--muted2);font-size:.7rem;letter-spacing:1px">FACE DISTANCE</div>
+            <div style="font-family:'Orbitron',monospace;font-size:1.4rem;font-weight:900;color:var(--cyan)">{{ result.distance }}</div>
+            <div style="color:var(--muted2);font-size:.72rem">0.0=identical · 0.6+=different</div>
+          </div>
+        </div>
+        <div class="col-6">
+          <div style="background:rgba(0,0,0,.2);border-radius:10px;padding:14px;border:1px solid var(--border)">
+            <div style="color:var(--muted2);font-size:.7rem;letter-spacing:1px">VERDICT</div>
+            <div style="font-size:1rem;font-weight:700;margin-top:4px;color:{{ '#ff5252' if result.match else '#00e676' }}">
+              {{ '⚠ MATCH — SAME PERSON' if result.match else '✓ NO MATCH — DIFFERENT' }}
+            </div>
+          </div>
+        </div>
+      </div>
+      <!-- Similarity bar -->
+      <div class="conf-bar-wrap mt-3">
+        <div class="conf-bar-label"><span>Similarity Score</span><span>{{ result.similarity }}%</span></div>
+        <div class="conf-bar-track" style="height:14px">
+          <div class="conf-bar-fill {{ 'conf-high' if result.similarity>=80 else ('conf-medium' if result.similarity>=60 else ('conf-low' if result.similarity>=40 else 'conf-unknown')) }}" style="width:{{ result.similarity }}%;height:14px"></div>
+        </div>
+      </div>
+    </div>
+    {% else %}
+    <div class="panel" style="text-align:center;padding:60px">
+      <div style="font-size:48px;margin-bottom:16px;opacity:.4">⚖</div>
+      <div style="color:var(--muted2)">Upload two face photos to compare them</div>
+    </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

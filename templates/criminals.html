@@ -1,0 +1,80 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="d-flex align-items-center gap-3 mb-3 flex-wrap">
+  <div>
+    <h5 class="neon mb-0" style="font-family:'Orbitron',monospace;letter-spacing:2px">CRIMINAL DATABASE</h5>
+  </div>
+  <form class="d-flex gap-2 ms-auto flex-wrap" method="get">
+    <input class="form-control form-control-sm" name="q" value="{{ q }}" placeholder="Search name / CNIC / crime" style="width:200px">
+    <label class="d-flex align-items-center gap-1" style="color:var(--red2);font-size:.8rem;cursor:pointer">
+      <input type="checkbox" name="priority" value="1" {{ 'checked' if priority_only }}> Watchlist only
+    </label>
+    <button class="btn btn-sm btn-outline-cyber">Search</button>
+    <a class="btn btn-sm btn-cyber" href="{{ url_for('criminal_add') }}">＋ Add</a>
+    <form method="post" action="{{ url_for('criminals_retrain') }}" style="margin:0">
+      <button class="btn btn-sm btn-outline-purple">⟳ Retrain</button>
+    </form>
+  </form>
+</div>
+<div class="panel p-0" style="overflow:hidden">
+  <div class="table-responsive">
+    <table class="table table-dark table-hover align-middle mb-0">
+      <thead>
+        <tr>
+          <th></th>
+          <th>Name</th>
+          <th>CNIC/ID</th>
+          <th>Crime</th>
+          <th>Status</th>
+          <th style="text-align:center">Threat</th>
+          <th style="text-align:center">Detections</th>
+          <th style="text-align:center">Priority</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+      {% for r in rows %}
+        <tr class="{{ 'table-danger-soft' if r.priority }}">
+          <td style="width:60px">
+            {% if r.mugshot %}
+              <img src="{{ url_for('file_by_rel', p=r.mugshot) }}" class="mug-thumb">
+            {% else %}
+              <div class="mug-thumb" style="background:var(--panel);display:flex;align-items:center;justify-content:center;color:var(--muted);border-radius:8px;border:1px solid var(--border)">?</div>
+            {% endif %}
+          </td>
+          <td>
+            <b>{{ r.name }}</b>
+            {% if r.priority %}<span class="ms-1" style="color:var(--red2)">⚑</span>{% endif %}
+          </td>
+          <td style="color:var(--muted2);font-size:.85rem">{{ r.cnic or '—' }}</td>
+          <td style="font-size:.85rem">{{ r.crime_type or '—' }}</td>
+          <td><span class="status {{ r.status|lower }}">{{ r.status }}</span></td>
+          <td style="text-align:center">
+            {% set ts = r.threat_score or 0 %}
+            {% set tc = '#ff1744' if ts>=8 else ('#ff6d00' if ts>=6 else ('#ffd740' if ts>=4 else '#64748b')) %}
+            <span style="font-family:'Orbitron',monospace;font-weight:900;color:{{ tc }};font-size:1rem;text-shadow:0 0 8px {{ tc }}60">{{ '%.1f'|format(ts) }}</span>
+            <div style="width:48px;height:4px;background:rgba(255,255,255,.07);border-radius:2px;margin:3px auto 0">
+              <div style="height:4px;border-radius:2px;width:{{ (ts/10*100)|int }}%;background:{{ tc }}"></div>
+            </div>
+          </td>
+          <td style="text-align:center;font-family:'Share Tech Mono',monospace;color:var(--cyan)">{{ r.det_count }}</td>
+          <td style="text-align:center">
+            <form method="post" action="{{ url_for('toggle_priority', cid=r.id) }}" style="margin:0">
+              <button class="btn btn-sm" style="background:none;border:none;font-size:1.1rem;cursor:pointer;color:{{ '#ff1744' if r.priority else 'var(--muted)' }}" title="{{ 'Remove from watchlist' if r.priority else 'Add to watchlist' }}">⚑</button>
+            </form>
+          </td>
+          <td class="text-end">
+            <a class="btn btn-sm btn-outline-cyber" href="{{ url_for('criminal_edit', cid=r.id) }}">Edit</a>
+            <form method="post" action="{{ url_for('criminal_delete', cid=r.id) }}" class="d-inline" onsubmit="return confirm('Delete this criminal and all their data?')">
+              <button class="btn btn-sm" style="color:var(--red2);border:1px solid rgba(255,82,82,.3);border-radius:6px;padding:3px 10px;font-size:.78rem;font-weight:700">Del</button>
+            </form>
+          </td>
+        </tr>
+      {% else %}
+        <tr><td colspan="9" class="text-center" style="color:var(--muted);padding:30px">No criminals found.</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

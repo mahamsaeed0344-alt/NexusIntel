@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="row g-3">
+  <div class="col-lg-7">
+    <div class="panel">
+      <div class="panel-head">DETECTION LOG</div>
+      <pre class="logbox" style="background:rgba(0,0,0,.3);padding:12px;border-radius:8px;max-height:500px;overflow:auto;font-size:.75rem;font-family:'Share Tech Mono',monospace;color:var(--muted2);border:1px solid var(--border)">{{ log_text or 'No log entries yet.' }}</pre>
+    </div>
+  </div>
+  <div class="col-lg-5">
+    <div class="panel">
+      <div class="panel-head">AUDIT TRAIL</div>
+      <div class="table-responsive" style="max-height:500px;overflow-y:auto">
+        <table class="table table-dark table-sm">
+          <thead><tr><th>Time</th><th>User</th><th>Action</th></tr></thead>
+          <tbody>
+          {% for a in audit %}
+            <tr>
+              <td style="font-size:.72rem;font-family:'Share Tech Mono',monospace;color:var(--muted2)">{{ a.timestamp }}</td>
+              <td><span class="badge-cyber">{{ a.user }}</span></td>
+              <td style="font-size:.82rem">{{ a.action }}{% if a.detail %}<span style="color:var(--muted2);font-size:.75rem"> · {{ a.detail[:30] }}</span>{% endif %}</td>
+            </tr>
+          {% else %}
+            <tr><td colspan="3" class="text-center" style="color:var(--muted)">No entries.</td></tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

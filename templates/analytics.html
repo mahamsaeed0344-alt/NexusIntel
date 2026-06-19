@@ -1,0 +1,149 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="d-flex align-items-center gap-3 mb-3">
+  <div>
+    <h5 class="neon mb-0" style="font-family:'Orbitron',monospace;letter-spacing:2px">ANALYTICS DASHBOARD</h5>
+    <div style="color:var(--muted2);font-size:.82rem">Detection statistics & intelligence reports</div>
+  </div>
+  <div class="ms-auto">
+    <a href="{{ url_for('export_csv') }}" class="btn btn-outline-cyber btn-sm me-1">⬇ CSV</a>
+    <a href="{{ url_for('export_xlsx') }}" class="btn btn-outline-cyber btn-sm me-1">⬇ XLSX</a>
+    <a href="{{ url_for('export_pdf') }}" class="btn btn-cyber btn-sm">⬇ PDF</a>
+  </div>
+</div>
+
+<!-- KPI row -->
+<div class="row g-3 mb-3">
+  <div class="col-6 col-md-3"><div class="stat-card c1"><div class="stat-icon">🔮</div><div class="stat-label">Forecast / day</div><div class="stat-val c" id="fcVal">—</div></div></div>
+  <div class="col-6 col-md-3"><div class="stat-card c4"><div class="stat-icon">🎯</div><div class="stat-label">Avg Accuracy</div><div class="stat-val g" id="acc">—</div></div></div>
+  <div class="col-6 col-md-3"><div class="stat-card c2"><div class="stat-icon">🔍</div><div class="stat-label">Total Detections</div><div class="stat-val r" id="td">—</div></div></div>
+  <div class="col-6 col-md-3"><div class="stat-card c3"><div class="stat-icon">❓</div><div class="stat-label">Unknowns</div><div class="stat-val p" id="unk">—</div></div></div>
+</div>
+
+<!-- Charts row 1 -->
+<div class="row g-3 mb-3">
+  <div class="col-lg-8">
+    <div class="panel chart-panel-big">
+      <div class="chart-title-big">DETECTIONS PER DAY</div>
+      <div class="chart-subtitle">14-day trend with 7-day moving average</div>
+      <canvas id="cDay" height="130"></canvas>
+    </div>
+  </div>
+  <div class="col-lg-4">
+    <div class="panel">
+      <div class="panel-head">CONFIDENCE DISTRIBUTION</div>
+      <canvas id="cConf" height="220"></canvas>
+    </div>
+  </div>
+</div>
+
+<!-- Charts row 2 -->
+<div class="row g-3 mb-3">
+  <div class="col-lg-6">
+    <div class="panel">
+      <div class="panel-head">TOP DETECTED CRIMINALS</div>
+      <canvas id="cTop" height="220"></canvas>
+    </div>
+  </div>
+  <div class="col-lg-6">
+    <div class="panel">
+      <div class="panel-head">CRIME CATEGORIES</div>
+      <canvas id="cCat" height="220"></canvas>
+    </div>
+  </div>
+</div>
+
+<!-- Confidence breakdown table -->
+<div class="row g-3">
+  <div class="col-lg-6">
+    <div class="panel">
+      <div class="panel-head">ACCURACY BREAKDOWN</div>
+      <div id="confBars"></div>
+    </div>
+  </div>
+  <div class="col-lg-6">
+    <div class="panel">
+      <div class="panel-head">KNOWN vs UNKNOWN</div>
+      <canvas id="cKU" height="220"></canvas>
+    </div>
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+const CYAN='#00e5ff', RED='#ff5252', GREEN='#00e676', PURPLE='#a855f7', AMBER='#ffd740', ORANGE='#ff6d00';
+const GRID='#1a2540', TICK='#64748b';
+
+function base(){
+  return {
+    plugins:{
+      legend:{labels:{color:TICK,font:{family:"'Exo 2'",size:12}}},
+      tooltip:{backgroundColor:'rgba(10,16,32,.95)',borderColor:CYAN,borderWidth:1,titleColor:CYAN,bodyColor:'#e2e8f0'}
+    },
+    scales:{
+      x:{ticks:{color:TICK},grid:{color:GRID}},
+      y:{ticks:{color:TICK},grid:{color:GRID},min:0}
+    }
+  };
+}
+
+fetch('/api/stats').then(r=>r.json()).then(s=>{
+  fcVal.textContent = s.forecast_per_day;
+  acc.textContent = s.accuracy+'%';
+  td.textContent = s.total_det;
+  unk.textContent = s.unknown;
+
+  const avg7 = s.per_day.slice(-7).reduce((a,x)=>a+x.n,0)/Math.max(1,Math.min(7,s.per_day.length));
+
+  new Chart(cDay,{type:'line',data:{
+    labels:s.per_day.map(x=>x.d),
+    datasets:[
+      {label:'Detections',data:s.per_day.map(x=>x.n),
+        borderColor:CYAN,backgroundColor:'rgba(0,229,255,.12)',tension:.4,fill:true,
+        pointRadius:5,pointHoverRadius:8,pointBackgroundColor:CYAN,borderWidth:3},
+      {label:'7-day avg',data:s.per_day.map(()=>avg7),
+        borderColor:'rgba(168,85,247,.6)',borderDash:[6,4],pointRadius:0,fill:false,borderWidth:1.5}
+    ]
+  },options:{...base(),plugins:{...base().plugins}}});
+
+  // Confidence buckets bar
+  const bKeys = Object.keys(s.confidence_buckets);
+  const bVals = Object.values(s.confidence_buckets);
+  const bColors = ['rgba(100,116,139,.7)','rgba(255,215,64,.8)','rgba(0,229,255,.8)','rgba(0,230,118,.8)'];
+  new Chart(cConf,{type:'bar',data:{
+    labels:bKeys.map(k=>`${k}%`),
+    datasets:[{label:'Detections',data:bVals,backgroundColor:bColors,borderRadius:6,borderSkipped:false}]
+  },options:{...base()}});
+
+  // Confidence bars in HTML
+  const maxConf = Math.max(...bVals,1);
+  const confGrades = [{l:'0–50%',g:'failed'},{l:'50–70%',g:'low'},{l:'70–85%',g:'medium'},{l:'85–100%',g:'high'}];
+  document.getElementById('confBars').innerHTML = bKeys.map((k,i)=>`
+    <div class="conf-bar-wrap mb-3">
+      <div class="conf-bar-label"><span>${confGrades[i].l}</span><span>${bVals[i]} detections</span></div>
+      <div class="conf-bar-track"><div class="conf-bar-fill conf-${confGrades[i].g}" style="width:${(bVals[i]/maxConf*100).toFixed(0)}%"></div></div>
+    </div>`).join('');
+
+  // Top criminals
+  new Chart(cTop,{type:'bar',data:{
+    labels:s.top.map(x=>x.name),
+    datasets:[{label:'Detections',data:s.top.map(x=>x.n),
+      backgroundColor:'rgba(255,23,68,.7)',borderColor:'rgba(255,82,82,1)',borderWidth:1,borderRadius:6}]
+  },options:{...base(),indexAxis:'y'}});
+
+  // Crime categories pie
+  const pieColors = [CYAN,RED,AMBER,GREEN,PURPLE,ORANGE,'#3b82f6','#64748b'];
+  new Chart(cCat,{type:'doughnut',data:{
+    labels:s.categories.map(x=>x.c),
+    datasets:[{data:s.categories.map(x=>x.n),
+      backgroundColor:pieColors.slice(0,s.categories.length),borderWidth:2,borderColor:'#0a1020'}]
+  },options:{cutout:'55%',plugins:{legend:{labels:{color:TICK,font:{size:11}}},tooltip:{backgroundColor:'rgba(10,16,32,.95)',borderColor:CYAN,borderWidth:1,titleColor:CYAN,bodyColor:'#e2e8f0'}}}});
+
+  // Known/unknown
+  new Chart(cKU,{type:'doughnut',data:{
+    labels:['Known Criminal','Unknown Person'],
+    datasets:[{data:[s.known,s.unknown],backgroundColor:['rgba(255,23,68,.8)','rgba(255,215,64,.7)'],borderColor:[RED,AMBER],borderWidth:2}]
+  },options:{cutout:'65%',plugins:{legend:{labels:{color:TICK,font:{size:11}}},tooltip:{backgroundColor:'rgba(10,16,32,.95)',borderColor:CYAN,borderWidth:1,titleColor:CYAN,bodyColor:'#e2e8f0'}}}});
+});
+</script>
+{% endblock %}

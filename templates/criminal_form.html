@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="panel" style="max-width:900px;margin:0 auto">
+  <div class="panel-head">{{ 'EDIT CRIMINAL' if c else 'ADD NEW CRIMINAL' }}</div>
+  <form method="post" enctype="multipart/form-data">
+    <div class="row g-3">
+      <div class="col-md-6"><label>Full Name *</label><input class="form-control" name="name" maxlength="100" value="{{ c.name if c else '' }}" required></div>
+      <div class="col-md-6"><label>CNIC / ID Number</label><input class="form-control" name="cnic" maxlength="50" value="{{ c.cnic if c else '' }}"></div>
+      <div class="col-md-4"><label>Date of Birth</label><input class="form-control" type="date" name="dob" value="{{ c.dob if c else '' }}"></div>
+      <div class="col-md-4"><label>Nationality</label><input class="form-control" name="nationality" maxlength="60" value="{{ c.nationality if c else '' }}"></div>
+      <div class="col-md-4"><label>Crime Type</label>
+        <input class="form-control" name="crime_type" list="crimeList" maxlength="100" value="{{ c.crime_type if c else '' }}">
+        <datalist id="crimeList">
+          {% for ct in ['Murder','Robbery','Terrorism','Drug Trafficking','Assault','Fraud','Kidnapping','Rape','Arson','Cybercrime','Human Trafficking','Extortion','Money Laundering'] %}
+            <option value="{{ ct }}">
+          {% endfor %}
+        </datalist>
+      </div>
+      <div class="col-md-4"><label>Status</label>
+        <select class="form-select" name="status">
+          {% for s in ['Wanted','Arrested','Released','Suspect'] %}
+            <option {{ 'selected' if c and c.status==s }}>{{ s }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-md-8 d-flex align-items-end">
+        <label class="d-flex align-items-center gap-2 cursor-pointer" style="color:var(--red2);font-size:.9rem;margin-bottom:6px">
+          <input type="checkbox" name="priority" value="1" {{ 'checked' if c and c.priority }} style="width:16px;height:16px;accent-color:var(--red2)">
+          <span>⚑ Add to Priority Watchlist (triggers immediate alerts on detection)</span>
+        </label>
+      </div>
+      <div class="col-12"><label>Notes</label><textarea class="form-control" name="notes" maxlength="1000" rows="2">{{ c.notes if c else '' }}</textarea></div>
+      <div class="col-12"><label>Arrest History</label><textarea class="form-control" name="arrest_history" maxlength="1000" rows="2">{{ c.arrest_history if c else '' }}</textarea></div>
+      <div class="col-12">
+        <label>Mugshot Photos (multiple — more photos = better accuracy)</label>
+        <input class="form-control" type="file" name="mugshots" accept="image/*" multiple>
+        <div style="color:var(--muted2);font-size:.75rem;margin-top:4px">💡 Tip: Upload 3–5 clear frontal photos from different angles for best recognition accuracy</div>
+      </div>
+      <div class="col-12 d-flex gap-2">
+        <button class="btn btn-cyber">💾 Save &amp; Train Model</button>
+        <a class="btn btn-outline-cyber" href="{{ url_for('criminals_list') }}">Cancel</a>
+      </div>
+    </div>
+  </form>
+  {% if mugshots %}
+  <hr>
+  <div class="panel-head mt-2">EXISTING MUGSHOTS</div>
+  <div class="d-flex flex-wrap gap-2">
+    {% for m in mugshots %}
+      <div class="mug-card">
+        <img src="{{ url_for('file_by_rel', p=m.path) }}">
+        <form method="post" action="{{ url_for('mugshot_delete', mid=m.id) }}" onsubmit="return confirm('Delete this mugshot?')">
+          <button class="btn btn-sm w-100" style="color:var(--red2);border:1px solid rgba(255,82,82,.3);border-radius:0 0 6px 6px;background:rgba(255,23,68,.05);font-size:.75rem;font-weight:700">Delete</button>
+        </form>
+      </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

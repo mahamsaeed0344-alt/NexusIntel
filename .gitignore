@@ -1,0 +1,51 @@
+# ── Sensitive / generated data — NEVER commit ───────────────────────────────
+# Database (contains criminal records, detection history)
+database/*.db
+database/*.sqlite
+database/*.sqlite3
+
+# Trained face encodings (contains face data of everyone added)
+models/*.pkl
+
+# Criminal mugshot photos
+criminal_images/*
+!criminal_images/.gitkeep
+
+# Raw uploaded files (images/videos people scan)
+uploads/*
+!uploads/.gitkeep
+
+# Detection snapshots (captured faces from live/upload/video scans)
+detected/live/*
+detected/uploaded/*
+detected/video/*
+!detected/live/.gitkeep
+!detected/uploaded/.gitkeep
+!detected/video/.gitkeep
+
+# Logs (can contain names, locations, timestamps of detections)
+logs/*.txt
+!logs/.gitkeep
+
+# Generated reports (PDFs with names and confidence scores)
+reports/*.pdf
+!reports/.gitkeep
+
+# ── Config with secrets ──────────────────────────────────────────────────────
+# Uncomment if your config.json stores SMTP passwords, Twilio keys, etc.
+# config.json
+
+# ── Python ───────────────────────────────────────────────────────────────────
+__pycache__/
+*.pyc
+*.pyo
+venv/
+env/
+.venv/
+.env
+
+# ── OS / Editor junk ─────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

@@ -1,0 +1,74 @@
+{% extends "base.html" %}
+{% block content %}
+<!-- GPS Permission Warning -->
+<div id="gpsWarning" style="display:none;background:rgba(255,148,0,.1);border:1px solid rgba(255,148,0,.5);
+  border-radius:12px;padding:12px 16px;margin-bottom:12px;color:#ff9800;font-size:.85rem">
+  <strong>⚠ Location Permission Required</strong><br>
+  <span id="gpsWarningMsg">Allow location access in your browser to record exact GPS coordinates when a criminal is detected.</span><br>
+  <small style="color:var(--muted2)">Click the 🔒 lock/info icon in the address bar → Site settings → Location → Allow → Reload the page.</small>
+</div>
+<div class="row g-3">
+  <div class="col-lg-8">
+    <div class="panel">
+      <div class="panel-head d-flex justify-content-between align-items-center">
+        <span>LIVE FACE DETECTION</span>
+        <span id="statusBadge" class="badge bg-secondary">IDLE</span>
+      </div>
+      <div class="video-wrap">
+        <video id="vid" autoplay muted playsinline></video>
+        <canvas id="overlay"></canvas>
+      </div>
+      <div class="d-flex flex-wrap gap-2 mt-3">
+        <button id="btnStart" class="btn btn-cyber">▶ Start Camera</button>
+        <button id="btnStop" class="btn btn-outline-cyber" disabled>■ Stop</button>
+        <button id="btnSnap" class="btn btn-outline-cyber" disabled>📸 Snap &amp; Recognize</button>
+        <div class="form-check form-switch ms-2 align-self-center">
+          <input class="form-check-input" type="checkbox" id="autoScan">
+          <label class="form-check-label" for="autoScan">Auto-Scan every 1.5s</label>
+        </div>
+        <div class="ms-auto small" style="align-self:center">
+          <span id="locTxt" style="font-size:.75rem;color:var(--muted2)">📡 Requesting GPS permission…</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-lg-4">
+    <div class="panel">
+      <div class="panel-head d-flex justify-content-between align-items-center">
+        <span>LIVE RESULTS</span>
+        <a href="/snapshots?source=live" class="btn btn-outline-cyber btn-sm" style="font-size:.7rem">📷 View All Snapshots</a>
+      </div>
+      <div id="results" class="results">No faces yet.</div>
+    </div>
+    <div class="panel mt-3">
+      <div class="panel-head d-flex justify-content-between align-items-center">
+        <span>RECENT SAVED</span>
+        <a href="/map" class="btn btn-outline-cyber btn-sm" style="font-size:.7rem">🗺 Map</a>
+      </div>
+      <div id="savedList" class="saved-list"></div>
+    </div>
+  </div>
+</div>
+
+<!-- Criminal Detail Modal -->
+<div id="crimDetailModal" style="
+  display:none;position:fixed;inset:0;background:rgba(0,0,0,.8);
+  z-index:10000;align-items:center;justify-content:center;backdrop-filter:blur(8px)">
+  <div style="
+    width:500px;max-width:96vw;max-height:90vh;overflow-y:auto;
+    background:linear-gradient(145deg,#0a0e1a,#110814);
+    border:1px solid rgba(255,23,68,.5);border-radius:20px;padding:24px;
+    box-shadow:0 0 60px rgba(255,23,68,.3)">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+      <div style="font-family:'Orbitron',monospace;font-weight:700;color:var(--red2);letter-spacing:2px;font-size:.9rem">🚨 CRIMINAL PROFILE</div>
+      <button onclick="document.getElementById('crimDetailModal').style.display='none'"
+        style="background:none;border:1px solid var(--border);border-radius:6px;color:var(--muted2);padding:3px 10px;cursor:pointer">✕</button>
+    </div>
+    <div id="crimDetailBody">Loading…</div>
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/live.js') }}"></script>
+{% endblock %}

@@ -1,0 +1,72 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="panel">
+  <div class="panel-head d-flex justify-content-between align-items-center flex-wrap gap-2">
+    <span>DETECTION SNAPSHOTS</span>
+    <div class="btn-group">
+      <a class="btn btn-sm {{ 'btn-cyber' if source=='live' else 'btn-outline-cyber' }}" href="{{ url_for('snapshots', source='live') }}">◉ Live Camera</a>
+      <a class="btn btn-sm {{ 'btn-cyber' if source=='uploaded' else 'btn-outline-cyber' }}" href="{{ url_for('snapshots', source='uploaded') }}">⬆ Uploaded</a>
+      <a class="btn btn-sm {{ 'btn-cyber' if source=='video' else 'btn-outline-cyber' }}" href="{{ url_for('snapshots', source='video') }}">🎬 Video</a>
+    </div>
+  </div>
+  <div class="snap-grid">
+    {% for r in rows %}
+      {% set conf = r.confidence or 0 %}
+      {% set is_known = r.criminal_id %}
+      {% set grade = 'high' if conf>=80 else ('medium' if conf>=60 else ('low' if conf>=40 else 'unknown')) %}
+      <a class="snap-card {{ 'hit' if is_known else 'unknown' }}" href="{{ url_for('snapshot_detail', uid=r.detection_uid) }}">
+        <img src="{{ url_for('file_by_rel', p=r.snapshot_path) }}" loading="lazy" onerror="this.style.display='none'">
+        <div class="snap-meta">
+
+          <!-- Name — always show real criminal name or Unknown Person -->
+          <div class="snap-name" style="color:{{ '#ff5252' if is_known else '#ffd740' }}">
+            {{ r.name }}
+          </div>
+
+          <!-- Badge row -->
+          {% if is_known %}
+            <div class="d-flex align-items-center gap-2 mt-1 flex-wrap">
+              <span style="background:rgba(255,23,68,.18);border:1px solid rgba(255,23,68,.45);border-radius:20px;color:#ff5252;font-size:.68rem;font-weight:700;padding:1px 7px">🚨 CRIMINAL</span>
+              <span class="loc-badge {{ grade }}">{{ '%.1f'|format(conf) }}%</span>
+            </div>
+          {% else %}
+            <div class="mt-1">
+              <span style="background:rgba(255,215,64,.12);border:1px solid rgba(255,215,64,.35);border-radius:20px;color:#ffd740;font-size:.68rem;font-weight:700;padding:1px 7px">👤 UNIDENTIFIED</span>
+            </div>
+          {% endif %}
+
+          <!-- Timestamp — always shown for both -->
+          <div class="snap-ts mt-2" style="font-family:'Share Tech Mono',monospace;font-size:.72rem;color:var(--muted2)">
+            🕐 {{ r.timestamp }}
+          </div>
+
+          <!-- Snapshot indicator -->
+          <div style="font-size:.68rem;color:{% if r.snapshot_path %}var(--green){% else %}var(--muted){% endif %};margin-top:2px">
+            {% if r.snapshot_path %}📸 Snapshot saved{% else %}📷 No snapshot{% endif %}
+          </div>
+
+          <!-- Location — always shown for both unknown and criminal -->
+          <div class="snap-city mt-1">
+            📍 {{ r.city or 'Unknown location' }}
+            {% if r.address and r.address != r.city %}
+              <br><span style="font-size:.68rem;color:var(--muted)">{{ r.address }}</span>
+            {% endif %}
+          </div>
+
+          <!-- GPS coordinates — always shown when available -->
+          {% if r.lat and r.lon %}
+            <div style="font-size:.65rem;color:var(--muted2);font-family:'Share Tech Mono',monospace;margin-top:2px">
+              {{ '%.5f'|format(r.lat) }}, {{ '%.5f'|format(r.lon) }}
+            </div>
+          {% else %}
+            <div style="font-size:.65rem;color:var(--muted);margin-top:2px">No GPS data</div>
+          {% endif %}
+
+        </div>
+      </a>
+    {% else %}
+      <div style="color:var(--muted);padding:40px;text-align:center;grid-column:1/-1">No snapshots yet for this source.</div>
+    {% endfor %}
+  </div>
+</div>
+{% endblock %}

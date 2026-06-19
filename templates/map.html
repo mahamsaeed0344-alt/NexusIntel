@@ -1,0 +1,502 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="d-flex align-items-center gap-3 mb-3 flex-wrap">
+  <div>
+    <h5 class="neon mb-0" style="font-family:'Orbitron',monospace;letter-spacing:2px">🗺 DETECTION MAP</h5>
+    <div style="color:var(--muted2);font-size:.82rem">Real-time criminal & unknown person detections — live GPS pinpoints</div>
+  </div>
+  <div class="ms-auto d-flex gap-2 align-items-center flex-wrap">
+    <button class="map-filter-btn active" id="mfAll"  onclick="setFilter('all',this)">All</button>
+    <button class="map-filter-btn criminal" id="mfCrim" onclick="setFilter('criminal',this)">🔴 Criminals</button>
+    <button class="map-filter-btn unknown"  id="mfUnk"  onclick="setFilter('unknown',this)">🟡 Unknown</button>
+    <button class="btn btn-outline-cyber btn-sm" onclick="fitAll()">⊙ Fit All</button>
+    <span class="live-badge" id="mapLiveBadge">● LIVE</span>
+  </div>
+</div>
+
+<div class="row g-3" style="height:calc(100vh - 165px)">
+
+  <!-- Left panel: list + detail -->
+  <div class="col-lg-4" style="height:100%;display:flex;flex-direction:column;gap:0">
+    <div class="panel" style="height:100%;display:flex;flex-direction:column;padding:0;overflow:hidden">
+
+      <!-- Header -->
+      <div style="padding:12px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px;flex-shrink:0">
+        <span class="panel-head" style="margin:0">DETECTIONS</span>
+        <span id="mapCount" style="margin-left:auto;color:var(--muted2);font-size:.75rem">Loading…</span>
+      </div>
+
+      <!-- Detail pane (hidden until click) -->
+      <div id="detailPane" style="display:none;border-bottom:1px solid var(--border);padding:14px 16px;flex-shrink:0;background:rgba(255,23,68,.03);overflow-y:auto;max-height:55%">
+        <div id="detailImg"   style="margin-bottom:8px"></div>
+        <div id="detailName"  style="font-size:1.1rem;font-weight:700;margin-bottom:5px;letter-spacing:.5px"></div>
+        <div id="detailBadge" style="margin-bottom:8px;display:flex;gap:5px;flex-wrap:wrap"></div>
+        <table style="width:100%;font-size:.78rem;border-collapse:collapse" id="detailTable"></table>
+        <!-- Full criminal profile loaded from API -->
+        <div id="criminalProfile" style="display:none"></div>
+        <div style="display:flex;gap:6px;margin-top:10px">
+          <button onclick="closeDetail()"
+            style="flex:1;background:none;border:1px solid var(--border);
+            border-radius:6px;color:var(--muted2);padding:5px 10px;cursor:pointer;font-size:.72rem">✕ Close</button>
+          <button id="deleteDetBtn" onclick="deleteCurrentDetection()"
+            style="flex:1;background:rgba(255,82,82,.1);border:1px solid rgba(255,82,82,.4);
+            border-radius:6px;color:var(--red2);padding:5px 10px;cursor:pointer;font-size:.72rem;font-weight:700">🗑 Delete</button>
+        </div>
+      </div>
+
+      <!-- Scrollable list -->
+      <div id="mapList" style="flex:1;overflow-y:auto;padding:8px"></div>
+    </div>
+  </div>
+
+  <!-- Map -->
+  <div class="col-lg-8" style="height:100%">
+    <div style="height:100%;border-radius:16px;overflow:hidden;border:1px solid var(--border);position:relative">
+      <div id="mainMap" style="width:100%;height:100%"></div>
+      <!-- Location source badge -->
+      <div id="locSourceBadge" style="position:absolute;bottom:12px;left:12px;z-index:1000;
+        background:rgba(10,14,26,.85);border:1px solid rgba(0,229,255,.3);
+        border-radius:20px;padding:4px 12px;font-size:.72rem;color:var(--cyan);
+        font-family:'Share Tech Mono',monospace;backdrop-filter:blur(4px)">
+        📡 Waiting for location…
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<style>
+.map-filter-btn{background:rgba(255,255,255,.06);border:1px solid var(--border);border-radius:20px;
+  color:var(--muted2);font-size:.78rem;padding:4px 12px;cursor:pointer;font-weight:700;transition:all .15s}
+.map-filter-btn.active,.map-filter-btn:hover{background:rgba(0,229,255,.12);color:var(--cyan);border-color:rgba(0,229,255,.4)}
+.map-filter-btn.criminal.active{background:rgba(255,23,68,.12);color:var(--red2);border-color:rgba(255,23,68,.4)}
+.map-filter-btn.unknown.active{background:rgba(255,215,64,.1);color:var(--amber);border-color:rgba(255,215,64,.4)}
+
+.map-item{padding:9px 10px;border-radius:10px;margin-bottom:6px;cursor:pointer;
+  border:1px solid var(--border);transition:all .15s;display:flex;align-items:center;gap:10px}
+.map-item:hover{border-color:rgba(0,229,255,.3);background:rgba(0,229,255,.04)}
+.map-item.hit{border-color:rgba(255,23,68,.3)}
+.map-item.hit:hover{background:rgba(255,23,68,.05)}
+.map-item.unknown-item{border-color:rgba(255,215,64,.25)}
+.map-item img{width:44px;height:44px;object-fit:cover;border-radius:6px;flex-shrink:0;border:1px solid var(--border)}
+.map-item .mi-ph{width:44px;height:44px;border-radius:6px;flex-shrink:0;
+  background:rgba(255,255,255,.05);display:flex;align-items:center;justify-content:center;font-size:18px;border:1px solid var(--border)}
+.map-item-info{flex:1;min-width:0}
+.map-item-name{font-weight:700;font-size:.86rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.map-item-ts{font-size:.7rem;color:var(--muted2);font-family:'Share Tech Mono',monospace}
+.map-item-loc{font-size:.7rem;color:var(--cyan)}
+#detailTable td{padding:3px 0;border-bottom:1px solid rgba(255,255,255,.04)}
+#detailTable td:first-child{color:var(--muted2);font-size:.68rem;letter-spacing:1px;text-transform:uppercase;padding-right:10px;white-space:nowrap;width:70px}
+
+/* ── Shiny marker animations ────────────────────────────────────────────── */
+@keyframes criminalPulse {
+  0%   { transform:scale(1);   box-shadow: 0 0 0 0 rgba(255,23,68,.9), 0 0 20px rgba(255,23,68,.8); }
+  40%  { transform:scale(1.15); box-shadow: 0 0 0 10px rgba(255,23,68,.3), 0 0 30px rgba(255,23,68,.6); }
+  70%  { transform:scale(1.05); box-shadow: 0 0 0 18px rgba(255,23,68,.05), 0 0 40px rgba(255,23,68,.4); }
+  100% { transform:scale(1);   box-shadow: 0 0 0 0 rgba(255,23,68,0), 0 0 20px rgba(255,23,68,.8); }
+}
+@keyframes unknownPulse {
+  0%   { box-shadow: 0 0 0 0 rgba(255,215,64,.7), 0 0 12px rgba(255,215,64,.5); }
+  60%  { box-shadow: 0 0 0 8px rgba(255,215,64,.1), 0 0 20px rgba(255,215,64,.3); }
+  100% { box-shadow: 0 0 0 0 rgba(255,215,64,0),   0 0 12px rgba(255,215,64,.5); }
+}
+@keyframes prioPulse {
+  0%   { transform:scale(1);    box-shadow: 0 0 0 0 rgba(255,0,0,1), 0 0 30px rgba(255,0,0,.9); }
+  50%  { transform:scale(1.25); box-shadow: 0 0 0 14px rgba(255,0,0,.15), 0 0 50px rgba(255,0,0,.7); }
+  100% { transform:scale(1);    box-shadow: 0 0 0 0 rgba(255,0,0,0),  0 0 30px rgba(255,0,0,.9); }
+}
+@keyframes approxPulse {
+  0%,100% { opacity:.7; } 50% { opacity:1; }
+}
+</style>
+
+<script>
+const isDark = document.documentElement.getAttribute('data-theme') !== 'light';
+const tileUrl = isDark
+  ? 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png'
+  : 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png';
+
+const map = L.map('mainMap').setView([30.3753, 69.3451], 5);
+L.tileLayer(tileUrl, { maxZoom:19, attribution:'© CartoDB' }).addTo(map);
+
+const markers = {}, markerData = {};
+let allData = [], activeFilter = 'all';
+
+// ── Shiny marker icons ────────────────────────────────────────────────────
+function makeIcon(isCriminal, isPriority, isApprox) {
+  if (isPriority) {
+    return L.divIcon({
+      className: '',
+      html: `<div style="
+        width:22px;height:22px;border-radius:50%;
+        background:radial-gradient(circle at 35% 35%, #ff6b6b, #ff0000);
+        border:2.5px solid rgba(255,255,255,.95);
+        animation:prioPulse 1s infinite;
+        position:relative">
+        <div style="position:absolute;inset:-4px;border-radius:50%;
+          border:2px dashed rgba(255,100,100,.6);animation:prioPulse 1s infinite reverse"></div>
+      </div>`,
+      iconSize: [22,22], iconAnchor: [11,11], popupAnchor: [0,-14]
+    });
+  }
+  if (isCriminal) {
+    return L.divIcon({
+      className: '',
+      html: `<div style="
+        width:18px;height:18px;border-radius:50%;
+        background:radial-gradient(circle at 35% 35%, #ff6060, #ff1744);
+        border:2.5px solid rgba(255,255,255,.9);
+        animation:criminalPulse 1.6s infinite;
+        ${isApprox?'opacity:.75;':''}">
+      </div>`,
+      iconSize: [18,18], iconAnchor: [9,9], popupAnchor: [0,-12]
+    });
+  }
+  return L.divIcon({
+    className: '',
+    html: `<div style="
+      width:13px;height:13px;border-radius:50%;
+      background:radial-gradient(circle at 35% 35%, #ffe766, #ffd740);
+      border:2px solid rgba(255,255,255,.85);
+      animation:unknownPulse 2.2s infinite;
+      ${isApprox?'opacity:.65;':''}">
+    </div>`,
+    iconSize: [13,13], iconAnchor: [6,6], popupAnchor: [0,-10]
+  });
+}
+
+// ── Map popup ─────────────────────────────────────────────────────────────
+function buildPopup(r) {
+  const isCrim = !!r.criminal_id;
+  const color  = isCrim ? '#ff5252' : '#ffd740';
+  const snap   = r.snapshot_path
+    ? `<img src="/file/by_rel?p=${encodeURIComponent(r.snapshot_path)}"
+        style="width:100%;max-height:120px;object-fit:cover;border-radius:8px;
+               margin-bottom:8px;border:2px solid ${color}"
+        onerror="this.style.display='none'">`
+    : '';
+  const crimBadge = isCrim
+    ? `<div style="display:inline-block;background:rgba(255,23,68,.2);border:1px solid rgba(255,23,68,.5);
+        border-radius:20px;color:#ff5252;font-size:.68rem;font-weight:700;padding:2px 8px;margin-bottom:4px">
+        🚨 CRIMINAL IDENTIFIED</div>`
+    : `<div style="display:inline-block;background:rgba(255,215,64,.15);border:1px solid rgba(255,215,64,.4);
+        border-radius:20px;color:#ffd740;font-size:.68rem;font-weight:700;padding:2px 8px;margin-bottom:4px">
+        👤 UNKNOWN PERSON</div>`;
+  const approxNote = r._approx
+    ? `<div style="font-size:.65rem;color:#ff9800;margin-top:2px">⚠ Approximate location (IP-based)</div>` : '';
+  const confLine = isCrim
+    ? `<div style="font-size:.78rem;margin-top:3px">Match: <b style="color:${color}">${(r.confidence||0).toFixed(1)}%</b></div>` : '';
+
+  return `<div style="min-width:215px;max-width:255px;font-family:'Exo 2',sans-serif">
+    ${snap}
+    ${crimBadge}
+    <div style="font-weight:700;color:${color};font-size:1rem;margin-bottom:2px">${r.name}</div>
+    <div style="font-size:.72rem;color:#aaa;font-family:monospace">🕐 ${r.timestamp}</div>
+    <div style="font-size:.76rem;color:#88c;margin-top:3px">📍 ${r.city||'Unknown'}</div>
+    ${r.address&&r.address!==r.city?`<div style="font-size:.68rem;color:#666">${r.address}</div>`:''}
+    ${r.lat&&r.lon?`<div style="font-size:.65rem;color:#555;font-family:monospace">
+      ${(+r.lat).toFixed(5)}, ${(+r.lon).toFixed(5)}</div>`:''}
+    ${approxNote}
+    ${confLine}
+    <button onclick="selectItem('${r.detection_uid}')"
+      style="margin-top:8px;width:100%;background:rgba(0,229,255,.1);
+      border:1px solid rgba(0,229,255,.3);border-radius:6px;color:#00e5ff;
+      padding:5px;cursor:pointer;font-size:.76rem;font-weight:700">
+      View Full Details →
+    </button>
+  </div>`;
+}
+
+// ── Detail pane ───────────────────────────────────────────────────────────
+let currentSelectedUid = null;
+
+function selectItem(uid) {
+  const r = markerData[uid];
+  if (!r) return;
+  currentSelectedUid = uid;
+  const isCrim = !!r.criminal_id;
+  const color  = isCrim ? '#ff5252' : '#ffd740';
+  const grade  = (r.confidence||0)>=80?'high':(r.confidence||0)>=60?'medium':(r.confidence||0)>=40?'low':'unknown';
+
+  document.getElementById('detailImg').innerHTML = r.snapshot_path
+    ? `<img src="/file/by_rel?p=${encodeURIComponent(r.snapshot_path)}"
+        style="width:100%;max-height:150px;object-fit:cover;border-radius:10px;border:2px solid ${color}"
+        onerror="this.style.display='none'">`
+    : `<div style="height:70px;background:rgba(255,255,255,.03);border-radius:10px;
+        display:flex;align-items:center;justify-content:center;font-size:30px">👤</div>`;
+
+  document.getElementById('detailName').innerHTML = `<span style="color:${color}">${r.name}</span>`;
+
+  document.getElementById('detailBadge').innerHTML = isCrim
+    ? `<span style="background:rgba(255,23,68,.18);border:1px solid rgba(255,23,68,.5);
+        border-radius:20px;color:#ff5252;font-size:.68rem;font-weight:700;padding:2px 8px">🚨 CRIMINAL</span>
+       <span class="loc-badge ${grade}">${(r.confidence||0).toFixed(1)}%</span>`
+    : `<span style="background:rgba(255,215,64,.12);border:1px solid rgba(255,215,64,.4);
+        border-radius:20px;color:#ffd740;font-size:.68rem;font-weight:700;padding:2px 8px">👤 UNKNOWN</span>`;
+
+  const approxRow = r._approx
+    ? `<tr><td>Location</td><td style="color:#ff9800;font-size:.7rem">⚠ Approximate (IP)</td></tr>` : '';
+
+  document.getElementById('detailTable').innerHTML = `
+    <tr><td>Time</td>    <td style="font-family:monospace;font-size:.72rem">${r.timestamp}</td></tr>
+    <tr><td>Source</td>  <td><span class="badge-cyber">${r.source||'live'}</span></td></tr>
+    <tr><td>City</td>    <td style="color:var(--cyan)">${r.city||'—'}</td></tr>
+    ${r.address&&r.address!==r.city?`<tr><td>Address</td><td style="font-size:.7rem">${r.address}</td></tr>`:''}
+    <tr><td>GPS</td>     <td style="font-family:monospace;font-size:.7rem">
+      ${r.lat&&r.lon?`${(+r.lat).toFixed(5)}, ${(+r.lon).toFixed(5)}`:'—'}</td></tr>
+    ${approxRow}
+    <tr><td>Snapshot</td><td>${r.snapshot_path?
+      `<span style="color:#00e676;font-size:.72rem">✔ Saved</span>`:
+      `<span style="color:var(--muted2);font-size:.72rem">—</span>`}</td></tr>
+    <tr><td>UID</td>     <td style="font-family:monospace;font-size:.65rem;color:var(--muted2)">${r.detection_uid}</td></tr>
+  `;
+
+  // Load full criminal profile
+  const profileDiv = document.getElementById('criminalProfile');
+  if (isCrim && r.criminal_id) {
+    profileDiv.style.display = 'block';
+    profileDiv.innerHTML = '<div style="text-align:center;padding:8px;color:var(--muted2);font-size:.75rem">Loading profile…</div>';
+    fetch(`/api/criminal/${r.criminal_id}`)
+      .then(res => res.json())
+      .then(c => {
+        const ts   = c.threat_score || 0;
+        const tcol = ts>=8?'#ff1744':ts>=5?'#ff6d00':ts>=2?'#ffd740':'#64748b';
+        const mug  = c.mugshot
+          ? `<img src="/file/by_rel?p=${encodeURIComponent(c.mugshot)}"
+              style="width:48px;height:48px;object-fit:cover;border-radius:7px;
+                     border:2px solid #ff5252;flex-shrink:0"
+              onerror="this.style.display='none'">`
+          : '';
+        const recentDets = (c.detections||[]).slice(0,4).map(d=>
+          `<div style="font-size:.66rem;color:var(--muted2);padding:2px 0;border-bottom:1px solid rgba(255,255,255,.04)">
+            🕐 ${d.timestamp?.slice(0,16)||'—'} &nbsp; 📍 ${d.city||'—'}
+           </div>`).join('');
+
+        profileDiv.innerHTML = `
+          <div style="border-top:1px solid rgba(255,23,68,.2);padding-top:10px;margin-top:8px">
+            <div style="font-size:.62rem;color:var(--muted2);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px">Full Criminal Profile</div>
+            <div style="display:flex;gap:10px;align-items:flex-start;margin-bottom:8px">
+              ${mug}
+              <div style="min-width:0">
+                <div style="font-weight:700;color:#ff5252;font-size:.85rem;font-family:'Orbitron',monospace">${c.name}</div>
+                <div style="font-size:.72rem;color:var(--amber)">${c.crime_type||'—'}</div>
+                <div style="font-size:.7rem">Threat: <b style="color:${tcol}">${ts.toFixed(1)}</b> · Status: <b style="color:#ffd740">${c.status||'—'}</b></div>
+              </div>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:5px;margin-bottom:8px">
+              <div style="background:rgba(255,255,255,.03);border-radius:6px;padding:6px">
+                <div style="font-size:.58rem;color:var(--muted2);text-transform:uppercase;letter-spacing:1px">CNIC</div>
+                <div style="font-family:monospace;font-size:.7rem">${c.cnic||'—'}</div>
+              </div>
+              <div style="background:rgba(255,255,255,.03);border-radius:6px;padding:6px">
+                <div style="font-size:.58rem;color:var(--muted2);text-transform:uppercase;letter-spacing:1px">Nationality</div>
+                <div style="font-size:.72rem">${c.nationality||'—'}</div>
+              </div>
+            </div>
+            ${recentDets?`<div style="font-size:.62rem;color:var(--muted2);text-transform:uppercase;letter-spacing:1px;margin-bottom:4px">Detection History</div>${recentDets}`:''}
+            <div style="display:flex;gap:5px;margin-top:8px">
+              <a href="/criminals" style="flex:1;text-align:center;background:rgba(255,23,68,.1);
+                border:1px solid rgba(255,23,68,.3);border-radius:7px;color:#ff5252;
+                padding:5px;font-size:.7rem;font-weight:700;text-decoration:none">👤 Profile</a>
+              <a href="/snapshots?source=live" style="flex:1;text-align:center;background:rgba(0,229,255,.08);
+                border:1px solid rgba(0,229,255,.25);border-radius:7px;color:#00e5ff;
+                padding:5px;font-size:.7rem;font-weight:700;text-decoration:none">📷 Snaps</a>
+            </div>
+          </div>`;
+      })
+      .catch(() => { profileDiv.style.display='none'; });
+  } else {
+    profileDiv.style.display = 'none';
+    profileDiv.innerHTML = '';
+  }
+
+  document.getElementById('detailPane').style.display = 'block';
+  if (r.lat && r.lon) map.flyTo([r.lat, r.lon], 14, { duration: 0.8 });
+  if (markers[uid]) markers[uid].openPopup();
+}
+window.selectItem = selectItem;
+
+function closeDetail() {
+  document.getElementById('detailPane').style.display = 'none';
+  currentSelectedUid = null;
+}
+
+function deleteCurrentDetection() {
+  if (!currentSelectedUid) return;
+  if (!confirm('Delete this detection? This cannot be undone.')) return;
+  const uid = currentSelectedUid;
+  fetch('/snapshot/' + uid + '/delete', { method: 'POST' })
+    .then(() => {
+      if (markers[uid]) { map.removeLayer(markers[uid]); delete markers[uid]; }
+      delete markerData[uid];
+      allData = allData.filter(r => r.detection_uid !== uid);
+      closeDetail();
+      renderList(allData);
+      document.getElementById('mapCount').textContent = `${allData.length} detection${allData.length!==1?'s':''}`;
+    })
+    .catch(() => alert('Failed to delete detection.'));
+}
+window.deleteCurrentDetection = deleteCurrentDetection;
+
+// ── Filter ────────────────────────────────────────────────────────────────
+function setFilter(f, btn) {
+  activeFilter = f;
+  document.querySelectorAll('.map-filter-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  renderList(allData);
+  updateMarkerVisibility();
+}
+
+function updateMarkerVisibility() {
+  Object.keys(markers).forEach(uid => {
+    const r = markerData[uid];
+    if (!r) return;
+    const show = activeFilter==='all' ||
+                 (activeFilter==='criminal' && r.criminal_id) ||
+                 (activeFilter==='unknown'  && !r.criminal_id);
+    if (show) { if (!map.hasLayer(markers[uid])) markers[uid].addTo(map); }
+    else       { map.removeLayer(markers[uid]); }
+  });
+}
+
+function fitAll() {
+  const pts = allData.filter(r => r.lat&&r.lon).map(r => [+r.lat, +r.lon]);
+  if (pts.length) map.fitBounds(pts, { padding: [40, 40] });
+}
+
+// ── Render list ───────────────────────────────────────────────────────────
+function renderList(data) {
+  const filtered = activeFilter==='all'      ? data
+    : activeFilter==='criminal' ? data.filter(r =>  r.criminal_id)
+    : data.filter(r => !r.criminal_id);
+
+  document.getElementById('mapCount').textContent =
+    `${filtered.length} detection${filtered.length!==1?'s':''}`;
+
+  if (!filtered.length) {
+    document.getElementById('mapList').innerHTML =
+      '<div style="text-align:center;color:var(--muted);padding:30px;font-size:.85rem">No detections.</div>';
+    return;
+  }
+
+  document.getElementById('mapList').innerHTML = filtered.map(r => {
+    const isCrim = !!r.criminal_id;
+    const color  = isCrim ? '#ff5252' : '#ffd740';
+    const snap   = r.snapshot_path
+      ? `<img src="/file/by_rel?p=${encodeURIComponent(r.snapshot_path)}"
+          onerror="this.parentElement.innerHTML='<div class=mi-ph>👤</div>'">`
+      : `<div class="mi-ph">👤</div>`;
+    const ts  = r.timestamp ? r.timestamp.slice(0,16).replace('T',' ') : '—';
+    const loc = r.city || (r.lat&&r.lon ? `${(+r.lat).toFixed(3)}, ${(+r.lon).toFixed(3)}` : '—');
+    const approxDot = r._approx
+      ? `<span style="color:#ff9800;font-size:.65rem"> ⚠approx</span>` : '';
+
+    return `<div class="map-item ${isCrim?'hit':'unknown-item'}" style="position:relative" onclick="selectItem('${r.detection_uid}')">
+      <button type="button"
+        onclick="event.stopPropagation(); quickDeleteFromList('${r.detection_uid}')"
+        style="position:absolute;top:4px;right:4px;z-index:3;width:20px;height:20px;border-radius:50%;
+               background:rgba(0,0,0,.55);border:1px solid rgba(255,82,82,.5);color:#ff5252;
+               font-size:.68rem;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center"
+        title="Delete">✕</button>
+      ${snap}
+      <div class="map-item-info">
+        <div class="map-item-name" style="color:${color}">${r.name}</div>
+        <div class="map-item-ts">🕐 ${ts}</div>
+        <div class="map-item-loc">📍 ${loc}${approxDot}</div>
+        ${r.snapshot_path?'<div style="font-size:.62rem;color:var(--green)">📸 Snapshot</div>':''}
+      </div>
+      ${isCrim
+        ? `<span class="loc-badge ${(r.confidence||0)>=80?'high':(r.confidence||0)>=60?'medium':'low'}" style="flex-shrink:0">
+            ${(r.confidence||0).toFixed(0)}%</span>`
+        : `<span style="flex-shrink:0;font-size:.68rem;color:#ffd740;border:1px solid rgba(255,215,64,.3);
+            border-radius:10px;padding:2px 5px">?</span>`}
+    </div>`;
+  }).join('');
+}
+
+function quickDeleteFromList(uid) {
+  if (!confirm('Delete this detection? This cannot be undone.')) return;
+  fetch('/snapshot/' + uid + '/delete', { method: 'POST' })
+    .then(() => {
+      if (markers[uid]) { map.removeLayer(markers[uid]); delete markers[uid]; }
+      delete markerData[uid];
+      allData = allData.filter(r => r.detection_uid !== uid);
+      if (currentSelectedUid === uid) closeDetail();
+      renderList(allData);
+    })
+    .catch(() => alert('Failed to delete detection.'));
+}
+window.quickDeleteFromList = quickDeleteFromList;
+
+// ── Refresh ───────────────────────────────────────────────────────────────
+function refresh() {
+  fetch('/api/locations').then(res => res.json()).then(data => {
+    allData = data;
+    data.forEach(r => {
+      markerData[r.detection_uid] = r;
+      if (!r.lat || !r.lon) return;
+      if (markers[r.detection_uid]) return;   // already plotted
+
+      const icon = makeIcon(!!r.criminal_id, r.criminal_id && (r.confidence||0)>=80, !!r._approx);
+      const m = L.marker([+r.lat, +r.lon], { icon }).addTo(map);
+      m.bindPopup(buildPopup(r), { maxWidth: 260, className: 'nexus-popup' });
+
+      // Flash new criminal markers
+      if (r.criminal_id) {
+        m.on('add', () => {
+          setTimeout(() => {
+            if (map.hasLayer(m)) m.openPopup();
+          }, 200);
+        });
+      }
+      markers[r.detection_uid] = m;
+    });
+
+    renderList(data);
+    updateMarkerVisibility();
+
+    // Update location source badge
+    const withGPS = data.filter(r => r.lat && r.lon && !r._approx).length;
+    const total   = data.filter(r => r.lat && r.lon).length;
+    document.getElementById('locSourceBadge').textContent =
+      total === 0 ? '📡 No detections yet'
+      : withGPS > 0 ? `📡 GPS: ${withGPS} · Total: ${total}`
+      : `🌐 IP Location (${total} detections)`;
+  }).catch(() => {});
+}
+
+// ── Popup styling ─────────────────────────────────────────────────────────
+const style = document.createElement('style');
+style.textContent = `
+  .nexus-popup .leaflet-popup-content-wrapper {
+    background: rgba(10,14,26,.97) !important;
+    border: 1px solid rgba(255,23,68,.4) !important;
+    border-radius: 12px !important;
+    box-shadow: 0 0 30px rgba(255,23,68,.3) !important;
+    color: #e2e8f0 !important;
+  }
+  .nexus-popup .leaflet-popup-tip { background: rgba(10,14,26,.97) !important; }
+  .nexus-popup .leaflet-popup-close-button { color: #94a3b8 !important; }
+`;
+document.head.appendChild(style);
+
+refresh();
+setInterval(refresh, 5000);
+
+// Auto-select from URL ?uid=
+(function(){
+  const uid = new URLSearchParams(window.location.search).get('uid');
+  if (uid) {
+    let tries = 0;
+    const wait = setInterval(() => {
+      tries++;
+      if (markerData[uid])    { clearInterval(wait); selectItem(uid); }
+      else if (tries > 20)     clearInterval(wait);
+    }, 400);
+  }
+})();
+</script>
+{% endblock %}

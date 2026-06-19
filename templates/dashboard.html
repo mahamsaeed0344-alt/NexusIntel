@@ -1,0 +1,149 @@
+{% extends "base.html" %}
+{% block content %}
+<!-- Stat row -->
+<div class="row g-3 mb-3">
+  <div class="col-6 col-md-3">
+    <div class="stat-card c1"><div class="stat-icon">👤</div><div class="stat-label">Criminals in DB</div><div class="stat-val c">{{ total_crim }}</div></div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="stat-card c2"><div class="stat-icon">🔍</div><div class="stat-label">Total Detections</div><div class="stat-val r">{{ total_det }}</div></div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="stat-card c3"><div class="stat-icon">❓</div><div class="stat-label">Unknown Persons</div><div class="stat-val p">{{ unknown }}</div></div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="stat-card c4"><div class="stat-icon">🎯</div><div class="stat-label">Avg Accuracy</div><div class="stat-val g">{{ accuracy }}%</div></div>
+  </div>
+</div>
+
+<div class="row g-3 mb-3">
+  <div class="col-lg-8">
+    <div class="panel chart-panel-big">
+      <div class="chart-title-big">DETECTION ACTIVITY — LAST 14 DAYS</div>
+      <div class="chart-subtitle">Real-time detection frequency with 7-day average</div>
+      <div id="chartKPIs" class="chart-kpi-row"></div>
+      <canvas id="chartDay" height="130"></canvas>
+    </div>
+  </div>
+  <div class="col-lg-4">
+    <div class="panel h-100 d-flex flex-column gap-3">
+      <div>
+        <div class="panel-head">SYSTEM ACCURACY</div>
+        <div class="acc-ring-wrap justify-content-center">
+          <svg class="acc-ring-svg" width="120" height="120" viewBox="0 0 120 120">
+            <circle class="acc-ring-track" cx="60" cy="60" r="50"/>
+            <circle class="acc-ring-fill" id="accArc" cx="60" cy="60" r="50"
+              stroke="#00e5ff" stroke-dasharray="0 314" transform="rotate(-90 60 60)"/>
+            <text class="acc-ring-text" id="accRingVal" x="60" y="58">—</text>
+            <text class="acc-ring-sub" x="60" y="74">ACCURACY</text>
+          </svg>
+          <div>
+            <div class="stat-label">Confidence Level</div>
+            <div id="accLevelText" style="font-size:.9rem;font-weight:600;margin-top:4px">—</div>
+          </div>
+        </div>
+      </div>
+      <div>
+        <div class="panel-head">KNOWN vs UNKNOWN</div>
+        <canvas id="chartKU" height="140"></canvas>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="row g-3">
+  <div class="col-lg-5">
+    <div class="panel">
+      <div class="panel-head d-flex justify-content-between align-items-center w-100">
+        <span>LIVE FEED</span><span class="live-badge">● LIVE</span>
+      </div>
+      <div id="feed" class="feed">
+        <div class="loc-empty"><div class="ico">📡</div>Awaiting detections…</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-lg-4">
+    <div class="panel">
+      <div class="panel-head">⚑ PRIORITY WATCHLIST</div>
+      {% if watchlist %}
+        {% for w in watchlist %}
+          {% set ts = w.threat_score or 0 %}
+          {% set tc = '#ff1744' if ts>=8 else ('#ff6d00' if ts>=6 else ('#ffd740' if ts>=4 else '#64748b')) %}
+          <div class="watchlist-row">
+            <div style="flex:1;min-width:0">
+              <div style="font-weight:700;color:{{ tc }};white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ w.name }}</div>
+              <div style="font-size:.75rem;color:var(--muted2)">{{ w.crime_type or '—' }} · {{ w.det_count }} detections</div>
+              <div class="threat-bar mt-1"><div class="threat-fill" style="width:{{ (ts/10*100)|int }}%;background:{{ tc }}"></div></div>
+            </div>
+            <div style="text-align:right;flex-shrink:0">
+              <div style="font-family:'Orbitron',monospace;font-size:1.2rem;font-weight:900;color:{{ tc }}">{{ '%.1f'|format(ts) }}</div>
+              <div style="font-size:.65rem;color:var(--muted2)">THREAT</div>
+            </div>
+          </div>
+        {% endfor %}
+        <a href="{{ url_for('criminals_list', priority=1) }}" class="btn btn-outline-cyber btn-sm w-100 mt-2">View All Watchlist</a>
+      {% else %}
+        <div style="color:var(--muted);text-align:center;padding:24px">No priority criminals yet.<br><a href="{{ url_for('criminals_list') }}" style="color:var(--cyan)">Mark criminals as priority ⚑</a></div>
+      {% endif %}
+    </div>
+  </div>
+  <div class="col-lg-3">
+    <div class="panel">
+      <div class="panel-head">QUICK ACTIONS</div>
+      <div class="d-grid gap-2">
+        <a class="btn btn-cyber" href="{{ url_for('live_page') }}">◉ Live Detection</a>
+        <a class="btn btn-outline-cyber" href="{{ url_for('upload_page') }}">⬆ Upload Images</a>
+        <a class="btn btn-outline-cyber" href="{{ url_for('video_page') }}">🎬 Scan Video</a>
+        <a class="btn btn-outline-cyber" href="{{ url_for('compare_page') }}">⚖ Compare Faces</a>
+        <a class="btn btn-outline-cyber" href="{{ url_for('network_page') }}">🕸 Network Graph</a>
+        <a class="btn btn-outline-cyber" href="{{ url_for('map_page') }}">🗺 Detection Map</a>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+const CYAN='#00e5ff',RED='#ff5252',GREEN='#00e676',AMBER='#ffd740',PURPLE='#a855f7';
+const GRID='#1a2540',TICK='#64748b',PANEL='#0a1020';
+fetch('/api/stats').then(r=>r.json()).then(s=>{
+  const pct=Math.min(100,Math.max(0,s.accuracy));
+  const circ=2*Math.PI*50;
+  document.getElementById('accArc').setAttribute('stroke-dasharray',`${(pct/100)*circ} ${circ}`);
+  document.getElementById('accRingVal').textContent=pct.toFixed(1)+'%';
+  const color=pct>=80?GREEN:pct>=60?CYAN:pct>=40?AMBER:RED;
+  document.getElementById('accArc').setAttribute('stroke',color);
+  document.getElementById('accLevelText').textContent=pct>=80?'🟢 Excellent':pct>=60?'🔵 Good':pct>=40?'🟡 Moderate':'🔴 Low';
+  document.getElementById('accLevelText').style.color=color;
+  const total=s.per_day.reduce((a,x)=>a+x.n,0);
+  const peak=Math.max(...s.per_day.map(x=>x.n),0);
+  const avg7=s.per_day.slice(-7).reduce((a,x)=>a+x.n,0)/Math.max(1,Math.min(7,s.per_day.length));
+  document.getElementById('chartKPIs').innerHTML=`
+    <div class="chart-kpi"><div class="val neon">${total}</div><div class="lbl">14-Day Total</div></div>
+    <div class="chart-kpi"><div class="val" style="color:${RED}">${peak}</div><div class="lbl">Peak Day</div></div>
+    <div class="chart-kpi"><div class="val" style="color:${AMBER}">${avg7.toFixed(1)}</div><div class="lbl">7-Day Avg</div></div>
+    <div class="chart-kpi"><div class="val" style="color:${GREEN}">${s.forecast_per_day}</div><div class="lbl">Forecast</div></div>`;
+  new Chart(chartDay,{type:'line',data:{labels:s.per_day.map(x=>x.d),datasets:[
+    {label:'Detections',data:s.per_day.map(x=>x.n),borderColor:CYAN,backgroundColor:'rgba(0,229,255,.12)',tension:.4,fill:true,pointRadius:5,pointHoverRadius:8,pointBackgroundColor:CYAN,borderWidth:3},
+    {label:'7-day avg',data:s.per_day.map(()=>avg7),borderColor:'rgba(168,85,247,.6)',borderDash:[6,4],pointRadius:0,fill:false,borderWidth:1.5}
+  ]},options:{plugins:{legend:{labels:{color:TICK}},tooltip:{backgroundColor:'rgba(10,16,32,.95)',borderColor:CYAN,borderWidth:1,titleColor:CYAN,bodyColor:'#e2e8f0'}},scales:{x:{ticks:{color:TICK},grid:{color:GRID}},y:{ticks:{color:TICK},grid:{color:GRID},min:0}}}});
+  new Chart(chartKU,{type:'doughnut',data:{labels:['Known','Unknown'],datasets:[{data:[s.known,s.unknown],backgroundColor:['rgba(255,23,68,.8)','rgba(255,215,64,.7)'],borderColor:[RED,AMBER],borderWidth:2}]},options:{cutout:'68%',plugins:{legend:{labels:{color:TICK}}}}});
+});
+function refreshFeed(){
+  fetch('/api/recent').then(r=>r.json()).then(rows=>{
+    if(!rows.length){document.getElementById('feed').innerHTML='<div class="loc-empty"><div class="ico">📡</div>No detections yet.</div>';return;}
+    document.getElementById('feed').innerHTML=rows.map(r=>{
+      const conf=r.confidence||0;
+      const grade=conf>=80?'high':conf>=60?'medium':conf>=40?'low':'unknown';
+      return `<div class="feed-row ${r.criminal_id?'hit':'unknown'}">
+        <div class="pulse-dot ${r.criminal_id?'red':''}"></div>
+        <div style="flex:1;min-width:0"><b style="color:${r.criminal_id?'#ff5252':'#ffd740'}">${r.name}</b><span style="color:#64748b;font-size:.8rem"> · ${r.source} · ${r.city||'—'}</span></div>
+        <span class="loc-badge ${grade}">${conf.toFixed(1)}%</span>
+        <span class="ts">${r.timestamp.slice(11,19)}</span>
+      </div>`;
+    }).join('');
+  });
+}
+refreshFeed();setInterval(refreshFeed,4000);
+</script>
+{% endblock %}

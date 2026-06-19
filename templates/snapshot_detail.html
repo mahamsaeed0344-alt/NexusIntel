@@ -1,0 +1,78 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="row g-3">
+  <div class="col-lg-7">
+    <div class="panel">
+      <div class="panel-head">DETECTION SNAPSHOT</div>
+      <img src="{{ url_for('file_by_rel', p=r.snapshot_path) }}" class="img-fluid rounded" style="border:1px solid var(--border)">
+    </div>
+  </div>
+  <div class="col-lg-5">
+    <div class="panel">
+      <div class="panel-head">DETECTION DETAILS</div>
+
+      <!-- Accuracy prominent display -->
+      {% set conf = r.confidence or 0 %}
+      {% set grade = 'high' if conf >= 80 else ('medium' if conf >= 60 else ('low' if conf >= 40 else 'unknown')) %}
+      <div class="d-flex align-items-center gap-3 mb-3 p-3" style="background:rgba(0,0,0,.2);border-radius:12px;border:1px solid var(--border)">
+        <svg viewBox="0 0 80 80" width="80" height="80" style="flex-shrink:0">
+          <circle cx="40" cy="40" r="32" fill="none" stroke="rgba(255,255,255,.07)" stroke-width="7"/>
+          <circle cx="40" cy="40" r="32" fill="none"
+            stroke="{{ '#00e676' if conf>=80 else ('#00e5ff' if conf>=60 else ('#ffd740' if conf>=40 else '#ff5252')) }}"
+            stroke-width="7" stroke-linecap="round"
+            stroke-dasharray="{{ (conf/100)*(2*3.14159*32)|round(1) }} 201"
+            transform="rotate(-90 40 40)"/>
+          <text x="40" y="38" text-anchor="middle" dominant-baseline="middle"
+            font-family="'Orbitron',monospace" font-size="13" font-weight="900"
+            fill="{{ '#00e676' if conf>=80 else ('#00e5ff' if conf>=60 else ('#ffd740' if conf>=40 else '#ff5252')) }}">
+            {{ '%.0f'|format(conf) }}%
+          </text>
+          <text x="40" y="53" text-anchor="middle" font-family="'Exo 2'" font-size="8" fill="#64748b">ACCURACY</text>
+        </svg>
+        <div>
+          <div style="font-size:1.1rem;font-weight:700;color:{{ '#ff5252' if r.criminal_id else '#ffd740' }}">{{ r.name }}</div>
+          <span class="loc-badge {{ grade }} mt-1">{{ 'MATCH' if r.criminal_id else 'UNKNOWN PERSON' }}</span>
+          <div class="conf-bar-wrap mt-2" style="width:180px">
+            <div class="conf-bar-track">
+              <div class="conf-bar-fill conf-{{ grade }}" style="width:{{ conf }}%"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <table class="table table-dark table-sm" style="font-size:.88rem">
+        <tr><th style="color:var(--muted2);font-size:.7rem;letter-spacing:1px">UID</th><td style="font-family:'Share Tech Mono',monospace;font-size:.78rem">{{ r.detection_uid }}</td></tr>
+        <tr><th>Source</th><td><span class="badge-cyber">{{ r.source }}</span></td></tr>
+        <tr><th>Timestamp</th><td style="font-family:'Share Tech Mono',monospace">{{ r.timestamp }}</td></tr>
+        <tr><th>City</th><td>{{ r.city or '—' }}</td></tr>
+        <tr><th>Coordinates</th><td style="font-family:'Share Tech Mono',monospace;font-size:.78rem">{{ r.lat or '—' }}, {{ r.lon or '—' }}</td></tr>
+        <tr><th>Address</th><td>{{ r.address or '—' }}</td></tr>
+      </table>
+
+      <div class="d-flex gap-2 flex-wrap mt-2">
+        <a class="btn btn-outline-cyber btn-sm" href="{{ url_for('file_by_rel', p=r.snapshot_path) }}" download>⬇ Download</a>
+        <form method="post" action="{{ url_for('snapshot_delete', uid=r.detection_uid) }}" onsubmit="return confirm('Delete?')" style="margin:0">
+          <button class="btn btn-sm" style="color:var(--red2);border:1px solid rgba(255,82,82,.4);border-radius:8px;font-weight:700;font-size:.82rem;padding:4px 14px">Delete</button>
+        </form>
+        <a class="btn btn-cyber btn-sm ms-auto" href="{{ url_for('snapshots', source=r.source) }}">← Back</a>
+      </div>
+
+      {% if r.lat and r.lon %}
+        <div id="mini" class="mini-map mt-3"></div>
+      {% endif %}
+    </div>
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}
+{% if r.lat and r.lon %}
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+const m=L.map('mini').setView([{{ r.lat }},{{ r.lon }}],13);
+L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',{maxZoom:19}).addTo(m);
+const icon=L.divIcon({className:'',html:'<div style="width:14px;height:14px;border-radius:50%;background:#ff1744;box-shadow:0 0 10px #ff1744;border:2px solid #fff"></div>',iconSize:[14,14],iconAnchor:[7,7]});
+L.marker([{{ r.lat }},{{ r.lon }}],{icon}).addTo(m).bindPopup("<b>{{ r.name }}</b>").openPopup();
+</script>
+{% endif %}
+{% endblock %}

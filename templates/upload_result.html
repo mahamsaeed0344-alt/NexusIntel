@@ -1,0 +1,97 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="d-flex align-items-center gap-3 mb-3 flex-wrap">
+  <div>
+    <h5 class="neon mb-0" style="font-family:'Orbitron',monospace;letter-spacing:2px">SCAN RESULTS</h5>
+    <div style="color:var(--muted2);font-size:.82rem">
+      {{ all_results|length }} image{{ 's' if all_results|length!=1 else '' }} processed
+      {% if city %} · 📍 {{ city }}{% endif %}
+    </div>
+  </div>
+  <div class="ms-auto d-flex gap-2">
+    <a href="{{ url_for('upload_page') }}" class="btn btn-outline-cyber">⬆ Scan More</a>
+    <a href="{{ url_for('snapshots', source='uploaded') }}" class="btn btn-cyber">📷 All Snapshots</a>
+  </div>
+</div>
+
+{% for item in all_results %}
+<div class="panel mb-3">
+  <div class="panel-head" style="display:flex;justify-content:space-between;align-items:center">
+    <span>{{ item.filename }}</span>
+    <span style="color:var(--muted2);font-weight:400;font-size:.78rem">
+      {{ item.results|length }} face{{ 's' if item.results|length!=1 else '' }} detected
+    </span>
+  </div>
+  <div class="row g-3">
+    <div class="col-lg-7">
+      <img src="{{ item.image_url }}" class="img-fluid rounded" style="border:1px solid var(--border);width:100%">
+    </div>
+    <div class="col-lg-5">
+      {% if not item.results %}
+        <div style="color:var(--muted2);padding:30px 0;text-align:center">
+          <div style="font-size:32px;margin-bottom:8px">🔍</div>
+          No faces detected in this image.
+        </div>
+      {% endif %}
+      {% for r in item.results %}
+        {% set conf = r.confidence %}
+        {% set is_known = r.name != 'UNKNOWN PERSON' %}
+        {% set grade = 'high' if conf >= 80 else ('medium' if conf >= 60 else ('low' if conf >= 40 else 'unknown')) %}
+        <div class="result-card {{ 'hit' if is_known else 'unknown' }} mb-2">
+          <div class="d-flex align-items-start gap-3">
+            {% if is_known %}
+            <!-- Accuracy ring for KNOWN criminals only -->
+            <svg viewBox="0 0 56 56" width="56" height="56" style="flex-shrink:0">
+              <circle cx="28" cy="28" r="22" fill="none" stroke="rgba(255,255,255,.07)" stroke-width="5"/>
+              <circle cx="28" cy="28" r="22" fill="none"
+                stroke="{{ '#00e676' if conf>=80 else ('#00e5ff' if conf>=60 else ('#ffd740' if conf>=40 else '#ff5252')) }}"
+                stroke-width="5" stroke-linecap="round"
+                stroke-dasharray="{{ (conf/100)*(2*3.14159*22)|round(1) }} 138.2"
+                transform="rotate(-90 28 28)"/>
+              <text x="28" y="32" text-anchor="middle" dominant-baseline="middle"
+                font-family="'Orbitron',monospace" font-size="9" font-weight="900"
+                fill="{{ '#00e676' if conf>=80 else ('#00e5ff' if conf>=60 else ('#ffd740' if conf>=40 else '#ff5252')) }}">
+                {{ '%.0f'|format(conf) }}%
+              </text>
+            </svg>
+            {% else %}
+            <!-- Unknown: question mark icon, no confidence -->
+            <div style="width:56px;height:56px;border-radius:50%;background:rgba(255,215,64,.1);border:2px solid rgba(255,215,64,.3);display:flex;align-items:center;justify-content:center;font-size:22px;flex-shrink:0">❓</div>
+            {% endif %}
+
+            <div style="flex:1;min-width:0">
+              <div class="rc-name {{ 'criminal' if is_known else '' }}">
+                {{ r.name }}
+              </div>
+
+              {% if is_known %}
+                <!-- Known criminal: show confidence badge + bar -->
+                <span class="loc-badge {{ grade }} mt-1">{{ 'MATCH' }}</span>
+                <div class="conf-bar-wrap mt-2">
+                  <div class="conf-bar-label"><span>Confidence</span><span>{{ '%.1f'|format(conf) }}%</span></div>
+                  <div class="conf-bar-track">
+                    <div class="conf-bar-fill conf-{{ grade }}" style="width:{{ conf }}%"></div>
+                  </div>
+                </div>
+                {% if r.crime_type %}<div class="rc-meta mt-1">🔴 Crime: {{ r.crime_type }}</div>{% endif %}
+                {% if r.status %}<div class="rc-meta">📌 Status: <span class="status {{ r.status|lower }}">{{ r.status }}</span></div>{% endif %}
+              {% else %}
+                <!-- Unknown person: NO confidence shown at all -->
+                <span class="loc-badge unknown mt-1">UNIDENTIFIED</span>
+                <div class="rc-meta mt-1" style="color:var(--muted2)">Not in criminal database</div>
+              {% endif %}
+
+              {% if city or lat %}
+              <div style="color:var(--cyan);font-size:.75rem;margin-top:6px">
+                📍 {% if city %}{{ city }}{% endif %}{% if lat and lon %} ({{ '%.4f'|format(lat) }}, {{ '%.4f'|format(lon) }}){% endif %}
+              </div>
+              {% endif %}
+            </div>
+          </div>
+        </div>
+      {% endfor %}
+    </div>
+  </div>
+</div>
+{% endfor %}
+{% endblock %}

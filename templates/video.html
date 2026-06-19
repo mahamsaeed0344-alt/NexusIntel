@@ -1,0 +1,70 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="row g-3">
+  <div class="col-lg-7">
+    <div class="panel">
+      <div class="panel-head">VIDEO SCAN — FRAME-BY-FRAME DETECTION</div>
+      <form method="post" enctype="multipart/form-data" id="vidForm">
+        <label class="dropzone" id="dz" for="vidInput">
+          <input type="file" id="vidInput" name="video" accept="video/*" required>
+          <div class="dz-ico">🎬</div>
+          <div class="dz-title" id="dzTitle">Drop video file here or click to choose</div>
+          <div class="dz-sub">MP4 / AVI / MOV / MKV — up to 200MB</div>
+        </label>
+        <div class="row g-2 mt-3">
+          <div class="col-6">
+            <label>Scan every N frames</label>
+            <input class="form-control" type="number" name="interval" value="30" min="1" max="300">
+            <div style="color:var(--muted2);font-size:.72rem;margin-top:3px">Lower = more thorough, slower</div>
+          </div>
+          <div class="col-6">
+            <label>Max frames to process</label>
+            <input class="form-control" type="number" name="max_frames" value="200" min="10" max="1000">
+            <div style="color:var(--muted2);font-size:.72rem;margin-top:3px">Limit for performance</div>
+          </div>
+        </div>
+        <div class="mt-3 d-flex align-items-center gap-2">
+          <button class="btn btn-cyber" type="submit" id="scanBtn">🎬 Scan Video</button>
+          <div id="spinner" class="d-none" style="display:flex;align-items:center;gap:8px;color:var(--cyan)">
+            <div class="spinner-border spinner-border-sm"></div>
+            <span style="font-size:.85rem">Processing video… this may take a while</span>
+          </div>
+        </div>
+      </form>
+    </div>
+  </div>
+  <div class="col-lg-5">
+    <div class="panel">
+      <div class="panel-head">HOW IT WORKS</div>
+      <div style="color:var(--muted2);font-size:.88rem;line-height:1.9">
+        <div>🎬 &nbsp;Upload any video file</div>
+        <div>🔢 &nbsp;System extracts one frame every N frames</div>
+        <div>🔍 &nbsp;Each frame is scanned for faces</div>
+        <div>🧠 &nbsp;Recognized faces matched to criminal DB</div>
+        <div>📸 &nbsp;Positive detections saved as snapshots</div>
+        <div>📍 &nbsp;Location tagged automatically</div>
+        <div>🚨 &nbsp;Alerts sent for priority criminals</div>
+      </div>
+      <hr>
+      <div class="panel-head">TIPS</div>
+      <div style="color:var(--muted2);font-size:.82rem;line-height:1.8">
+        <div>✅ &nbsp;30fps video: interval=30 scans ~1 frame/sec</div>
+        <div>✅ &nbsp;Good lighting gives better results</div>
+        <div>⚠️ &nbsp;Large files take longer to process</div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+document.getElementById('vidInput').addEventListener('change', e=>{
+  const f = e.target.files[0];
+  if(f) document.getElementById('dzTitle').textContent = f.name + ' (' + (f.size/1024/1024).toFixed(1) + ' MB)';
+});
+document.getElementById('vidForm').addEventListener('submit',()=>{
+  document.getElementById('scanBtn').disabled=true;
+  document.getElementById('spinner').classList.remove('d-none');
+});
+</script>
+{% endblock %}

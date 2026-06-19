@@ -1,0 +1,257 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="d-flex align-items-center gap-3 mb-3 flex-wrap">
+  <div>
+    <h5 class="neon mb-0" style="font-family:'Orbitron',monospace;letter-spacing:2px">LIVE LOCATION TRACKER</h5>
+    <div style="color:var(--muted2);font-size:.82rem">Real-time detections with full details — auto-refreshes every 5s</div>
+  </div>
+  <div class="ms-auto d-flex gap-2 align-items-center flex-wrap">
+    <span class="live-badge">● LIVE</span>
+    <button class="loc-filter active" id="fAll" onclick="setF('all',this)">All</button>
+    <button class="loc-filter crim"   id="fCrim" onclick="setF('criminal',this)">🔴 Criminal</button>
+    <button class="loc-filter unk"    id="fUnk"  onclick="setF('unknown',this)">🟡 Unknown</button>
+  </div>
+</div>
+
+<div class="row g-3">
+  <div class="col-lg-5">
+    <div class="panel" style="height:calc(100vh - 158px);display:flex;flex-direction:column;overflow:hidden">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;flex-shrink:0">
+        <span class="panel-head" style="margin:0">DETECTIONS</span>
+        <span id="locCount" style="color:var(--muted2);font-size:.78rem">—</span>
+      </div>
+      <div id="locList" class="loc-live-list" style="flex:1">
+        <div class="loc-empty"><div class="ico">📡</div>Loading…</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-lg-7">
+    <div class="panel" style="height:calc(100vh - 158px);padding:0;overflow:hidden">
+      <div id="locMap" style="width:100%;height:100%;border-radius:16px"></div>
+    </div>
+  </div>
+</div>
+
+<!-- Detail modal (no fixed position — inline overlay) -->
+<div id="locModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:7000;align-items:center;justify-content:center;backdrop-filter:blur(6px)">
+  <div style="background:linear-gradient(145deg,#08101e,#0d1a2e);border:1px solid var(--border);border-radius:20px;width:min(96vw,560px);max-height:90vh;overflow-y:auto;padding:0">
+    <div style="padding:16px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between">
+      <span style="font-family:'Orbitron',monospace;font-size:.72rem;letter-spacing:2px;color:var(--cyan)">DETECTION DETAIL</span>
+      <button onclick="closeModal()" style="background:none;border:none;color:var(--muted2);cursor:pointer;font-size:18px;line-height:1">✕</button>
+    </div>
+    <div id="modalBody" style="padding:20px"></div>
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<style>
+.loc-filter{background:rgba(255,255,255,.06);border:1px solid var(--border);border-radius:20px;color:var(--muted2);font-size:.78rem;padding:4px 12px;cursor:pointer;font-weight:700;transition:all .15s}
+.loc-filter.active,.loc-filter:hover{background:rgba(0,229,255,.1);color:var(--cyan);border-color:rgba(0,229,255,.35)}
+.loc-filter.crim.active{background:rgba(255,23,68,.1);color:var(--red2);border-color:rgba(255,82,82,.35)}
+.loc-filter.unk.active{background:rgba(255,215,64,.08);color:var(--amber);border-color:rgba(255,215,64,.35)}
+</style>
+<script>
+const isDark = document.documentElement.getAttribute('data-theme') !== 'light';
+const map = L.map('locMap').setView([30.3753, 69.3451], 5);
+L.tileLayer(isDark
+  ? 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png'
+  : 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',
+  {maxZoom:19,attribution:'© CartoDB'}).addTo(map);
+
+const markers={}, dataMap={};
+let allData=[], filter='all';
+
+// Pulse CSS
+const st=document.createElement('style');
+st.textContent='@keyframes lPulse{0%,100%{transform:scale(1)}50%{transform:scale(1.4)}}';
+document.head.appendChild(st);
+
+function makeIcon(isCrim){
+  const c = isCrim ? '#ff1744' : '#ffd740';
+  const g = isCrim ? 'rgba(255,23,68,.6)' : 'rgba(255,215,64,.4)';
+  return L.divIcon({className:'',
+    html:`<div style="width:13px;height:13px;border-radius:50%;background:${c};box-shadow:0 0 8px ${g},0 0 16px ${g};border:2px solid rgba(255,255,255,.85);animation:lPulse 2s infinite"></div>`,
+    iconSize:[13,13],iconAnchor:[6,6],popupAnchor:[0,-8]});
+}
+
+function setF(f,btn){
+  filter=f;
+  document.querySelectorAll('.loc-filter').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  renderList(allData);
+  Object.keys(markers).forEach(uid=>{
+    const r=dataMap[uid];
+    const show = f==='all'||(f==='criminal'&&r.criminal_id)||(f==='unknown'&&!r.criminal_id);
+    show ? (map.hasLayer(markers[uid])||markers[uid].addTo(map))
+         : map.removeLayer(markers[uid]);
+  });
+}
+
+function openDetail(uid){
+  const r = dataMap[uid];
+  if(!r) return;
+  const isCrim = !!r.criminal_id;
+  const color  = isCrim ? '#ff5252' : '#ffd740';
+  const grade  = r.confidence>=80?'high':r.confidence>=60?'medium':r.confidence>=40?'low':'unknown';
+  const snap   = r.snapshot_path
+    ? `<img src="/file/by_rel?p=${encodeURIComponent(r.snapshot_path)}"
+        style="width:100%;max-height:200px;object-fit:cover;border-radius:12px;margin-bottom:14px;border:1px solid var(--border)"
+        onerror="this.style.display='none'">`
+    : `<div style="height:100px;background:rgba(255,255,255,.03);border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:40px;margin-bottom:14px">👤</div>`;
+
+  const confBadge = isCrim
+    ? `<span class="loc-badge ${grade}" style="font-size:.85rem;padding:4px 12px">${(r.confidence||0).toFixed(1)}% confidence</span>`
+    : `<span class="loc-badge unknown" style="font-size:.85rem;padding:4px 12px">Unknown Person</span>`;
+
+  const confBar = isCrim ? `
+    <div class="conf-bar-wrap mt-2 mb-3">
+      <div class="conf-bar-label"><span>Match Confidence</span><span>${(r.confidence||0).toFixed(1)}%</span></div>
+      <div class="conf-bar-track" style="height:10px"><div class="conf-bar-fill conf-${grade}" style="width:${r.confidence||0}%;height:10px"></div></div>
+    </div>` : '<div class="mb-3"></div>';
+
+  document.getElementById('modalBody').innerHTML = `
+    ${snap}
+    <div style="font-size:1.15rem;font-weight:700;color:${color};margin-bottom:6px">${r.name}</div>
+    ${confBadge}
+    ${confBar}
+    <table style="width:100%;font-size:.83rem;border-collapse:collapse">
+      <tr style="border-bottom:1px solid var(--border)">
+        <td style="padding:7px 0;color:var(--muted2);font-size:.7rem;letter-spacing:1px;text-transform:uppercase;width:90px">Timestamp</td>
+        <td style="padding:7px 0;font-family:monospace">${r.timestamp}</td>
+      </tr>
+      <tr style="border-bottom:1px solid var(--border)">
+        <td style="padding:7px 0;color:var(--muted2);font-size:.7rem;letter-spacing:1px;text-transform:uppercase">Source</td>
+        <td style="padding:7px 0"><span class="badge-cyber">${r.source}</span></td>
+      </tr>
+      <tr style="border-bottom:1px solid var(--border)">
+        <td style="padding:7px 0;color:var(--muted2);font-size:.7rem;letter-spacing:1px;text-transform:uppercase">City</td>
+        <td style="padding:7px 0;color:var(--cyan)">📍 ${r.city||'Unknown'}</td>
+      </tr>
+      ${r.address?`<tr style="border-bottom:1px solid var(--border)"><td style="padding:7px 0;color:var(--muted2);font-size:.7rem;letter-spacing:1px;text-transform:uppercase">Address</td><td style="padding:7px 0">${r.address}</td></tr>`:''}
+      <tr style="border-bottom:1px solid var(--border)">
+        <td style="padding:7px 0;color:var(--muted2);font-size:.7rem;letter-spacing:1px;text-transform:uppercase">Coordinates</td>
+        <td style="padding:7px 0;font-family:monospace;font-size:.78rem">${r.lat&&r.lon?`${(+r.lat).toFixed(5)}, ${(+r.lon).toFixed(5)}`:'No GPS data'}</td>
+      </tr>
+      <tr>
+        <td style="padding:7px 0;color:var(--muted2);font-size:.7rem;letter-spacing:1px;text-transform:uppercase">UID</td>
+        <td style="padding:7px 0;font-family:monospace;font-size:.7rem;color:var(--muted2)">${r.detection_uid}</td>
+      </tr>
+    </table>
+    <div style="display:flex;gap:8px;margin-top:14px">
+      <button onclick="deleteDetection('${r.detection_uid}')"
+        style="flex:1;background:rgba(255,82,82,.1);border:1px solid rgba(255,82,82,.4);
+        border-radius:8px;color:var(--red2);padding:8px;cursor:pointer;font-size:.82rem;font-weight:700">
+        🗑 Delete Detection
+      </button>
+    </div>
+    ${r.lat&&r.lon?`<div id="miniMapModal" style="height:160px;border-radius:10px;border:1px solid var(--border);overflow:hidden;margin-top:12px"></div>`:''}
+  `;
+
+  const modal = document.getElementById('locModal');
+  modal.style.display='flex';
+
+  // Tiny map inside modal
+  if(r.lat && r.lon){
+    setTimeout(()=>{
+      const mm = L.map('miniMapModal',{zoomControl:false,attributionControl:false}).setView([+r.lat,+r.lon],14);
+      L.tileLayer(isDark
+        ?'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png'
+        :'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',
+        {maxZoom:19}).addTo(mm);
+      L.circleMarker([+r.lat,+r.lon],{radius:8,color:isCrim?'#ff1744':'#ffd740',fillOpacity:.9}).addTo(mm);
+    },150);
+  }
+}
+window.openDetail = openDetail;
+
+function closeModal(){ document.getElementById('locModal').style.display='none'; }
+window.closeModal = closeModal;
+
+function deleteDetection(uid){
+  if(!confirm('Delete this detection? This cannot be undone.')) return;
+  fetch('/snapshot/' + uid + '/delete', { method: 'POST' })
+    .then(() => {
+      // Remove marker from map
+      if(markers[uid]){ map.removeLayer(markers[uid]); delete markers[uid]; }
+      delete dataMap[uid];
+      allData = allData.filter(r => r.detection_uid !== uid);
+      renderList(allData);
+      closeModal();
+    })
+    .catch(() => alert('Failed to delete detection.'));
+}
+window.deleteDetection = deleteDetection;
+
+document.getElementById('locModal').addEventListener('click', e=>{
+  if(e.target === document.getElementById('locModal')) closeModal();
+});
+
+function renderList(data){
+  const filtered = filter==='all'?data:filter==='criminal'?data.filter(r=>r.criminal_id):data.filter(r=>!r.criminal_id);
+  document.getElementById('locCount').textContent = `${filtered.length} detection${filtered.length!==1?'s':''}`;
+  if(!filtered.length){
+    document.getElementById('locList').innerHTML='<div class="loc-empty"><div class="ico">📍</div>No detections match filter.</div>';
+    return;
+  }
+  document.getElementById('locList').innerHTML = filtered.map(r=>{
+    const isCrim=!!r.criminal_id, conf=r.confidence||0;
+    const grade=conf>=80?'high':conf>=60?'medium':conf>=40?'low':'unknown';
+    const snap=r.snapshot_path
+      ?`<img class="loc-snap" src="/file/by_rel?p=${encodeURIComponent(r.snapshot_path)}" onerror="this.className='loc-snap ph';this.outerHTML='<div class=\\'loc-snap ph\\'>👤</div>'">`
+      :`<div class="loc-snap ph">👤</div>`;
+    return `<div class="loc-card ${isCrim?'hit':'unknown'}" style="cursor:pointer;position:relative" onclick="openDetail('${r.detection_uid}');focusMap('${r.detection_uid}',${r.lat||0},${r.lon||0})">
+      <button type="button"
+        onclick="event.stopPropagation(); deleteDetection('${r.detection_uid}')"
+        style="position:absolute;top:4px;right:4px;z-index:3;width:22px;height:22px;border-radius:50%;
+               background:rgba(0,0,0,.55);border:1px solid rgba(255,82,82,.5);color:#ff5252;
+               font-size:.72rem;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center"
+        title="Delete">✕</button>
+      ${snap}
+      <div class="loc-info">
+        <div class="loc-name ${isCrim?'criminal':''}">${r.name}</div>
+        <div class="loc-ts">${r.timestamp.slice(0,16).replace('T',' ')}</div>
+        <div class="loc-geo">📍 ${r.city||'No location'}${r.lat?` · ${(+r.lat).toFixed(3)},${(+r.lon).toFixed(3)}`:''}</div>
+        <div class="loc-conf-row">
+          ${isCrim
+            ?`<span class="loc-badge ${grade}">${conf.toFixed(1)}%</span>`
+            :`<span class="loc-badge unknown">Unknown</span>`}
+          <span style="font-size:.72rem;color:var(--muted2)">${r.source}</span>
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function focusMap(uid,lat,lon){
+  if(lat&&lon) map.flyTo([lat,lon],14,{duration:0.8});
+  if(markers[uid]) setTimeout(()=>markers[uid].openPopup(),900);
+}
+
+function refresh(){
+  fetch('/api/locations').then(r=>r.json()).then(data=>{
+    allData=data;
+    data.forEach(r=>{
+      dataMap[r.detection_uid]=r;
+      if(!r.lat||!r.lon||markers[r.detection_uid]) return;
+      const m=L.marker([+r.lat,+r.lon],{icon:makeIcon(!!r.criminal_id)}).addTo(map);
+      m.bindPopup(`<div style="min-width:160px;font-family:'Exo 2',sans-serif">
+        <div style="font-weight:700;color:${r.criminal_id?'#ff5252':'#ffd740'};margin-bottom:4px">${r.name}</div>
+        <div style="font-size:.75rem;color:#888;font-family:monospace">${r.timestamp.slice(0,16)}</div>
+        <div style="font-size:.78rem;color:#666;margin-top:2px">📍 ${r.city||'Unknown'}</div>
+        <button onclick="openDetail('${r.detection_uid}')"
+          style="margin-top:6px;width:100%;background:rgba(0,229,255,.1);border:1px solid rgba(0,229,255,.3);
+          border-radius:5px;color:#00e5ff;padding:4px;cursor:pointer;font-size:.75rem">
+          Full Details →</button>
+      </div>`,{maxWidth:220});
+      markers[r.detection_uid]=m;
+    });
+    renderList(data);
+  }).catch(()=>{});
+}
+
+refresh(); setInterval(refresh,5000);
+</script>
+{% endblock %}

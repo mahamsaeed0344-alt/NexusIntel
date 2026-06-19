@@ -1,0 +1,111 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="row g-3">
+  <div class="col-lg-7">
+    <div class="panel">
+      <div class="panel-head">UPLOAD IMAGES TO SCAN</div>
+      <form id="uploadForm" method="post" enctype="multipart/form-data">
+        <label class="dropzone" id="dz" for="fileInput">
+          <input type="file" id="fileInput" name="images" accept="image/*" multiple>
+          <div class="dz-ico">⬆</div>
+          <div class="dz-title">Drop images here or click to choose</div>
+          <div class="dz-sub">JPG / PNG / WEBP — Multiple files supported — up to 16MB each</div>
+        </label>
+
+        <div id="previewGrid" class="preview-grid"></div>
+        <div id="previewCount" class="preview-count"></div>
+
+        <div class="mt-3 d-flex gap-2 align-items-center">
+          <button class="btn btn-cyber" type="submit" id="scanBtn">
+            <span id="scanTxt">Scan Images</span>
+          </button>
+          <button class="btn btn-outline-cyber" type="button" id="clearBtn" style="display:none">Clear</button>
+          <div id="scanSpinner" class="d-none ms-2" style="display:flex;align-items:center;gap:8px;color:var(--cyan)">
+            <div class="spinner-border spinner-border-sm" role="status"></div>
+            <span style="font-size:.85rem">Processing…</span>
+          </div>
+        </div>
+      </form>
+    </div>
+  </div>
+  <div class="col-lg-5">
+    <div class="panel">
+      <div class="panel-head">SCAN TIPS</div>
+      <div style="color:var(--muted2);font-size:.9rem;line-height:1.8">
+        <div style="margin-bottom:8px">✅ &nbsp;Clear, well-lit frontal photos work best</div>
+        <div style="margin-bottom:8px">✅ &nbsp;Multiple images processed in one go</div>
+        <div style="margin-bottom:8px">✅ &nbsp;Each image is individually annotated</div>
+        <div style="margin-bottom:8px">⚠️ &nbsp;Blurry or low-res images may reduce accuracy</div>
+        <div>⚠️ &nbsp;Side profiles may not detect correctly</div>
+      </div>
+      <hr>
+      <div class="panel-head mt-2">SUPPORTED FORMATS</div>
+      <div class="d-flex gap-2 flex-wrap">
+        <span class="badge-cyber">JPG</span>
+        <span class="badge-cyber">PNG</span>
+        <span class="badge-cyber">WEBP</span>
+        <span class="badge-cyber">BMP</span>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+const dz = document.getElementById('dz');
+const inp = document.getElementById('fileInput');
+const grid = document.getElementById('previewGrid');
+const countEl = document.getElementById('previewCount');
+const clearBtn = document.getElementById('clearBtn');
+const form = document.getElementById('uploadForm');
+const scanSpinner = document.getElementById('scanSpinner');
+
+let dt_files = [];
+
+function renderPreviews(){
+  grid.innerHTML = '';
+  dt_files.forEach((f,i)=>{
+    const url = URL.createObjectURL(f);
+    const item = document.createElement('div');
+    item.className='preview-item';
+    item.innerHTML=`<img src="${url}"><button class="rm" data-i="${i}">✕</button>`;
+    grid.appendChild(item);
+  });
+  countEl.textContent = dt_files.length > 0 ? `${dt_files.length} image${dt_files.length>1?'s':''} selected` : '';
+  clearBtn.style.display = dt_files.length > 0 ? '' : 'none';
+  // Update the file input
+  const transfer = new DataTransfer();
+  dt_files.forEach(f=>transfer.items.add(f));
+  inp.files = transfer.files;
+}
+
+inp.addEventListener('change',()=>{
+  [...inp.files].forEach(f=>{ if(!dt_files.find(x=>x.name===f.name&&x.size===f.size)) dt_files.push(f); });
+  renderPreviews();
+});
+
+grid.addEventListener('click',e=>{
+  if(e.target.classList.contains('rm')){
+    dt_files.splice(+e.target.dataset.i, 1);
+    renderPreviews();
+  }
+});
+
+clearBtn.addEventListener('click',()=>{ dt_files=[]; inp.value=''; renderPreviews(); });
+
+['dragenter','dragover'].forEach(ev=>dz.addEventListener(ev,e=>{e.preventDefault();dz.classList.add('drag-over');}));
+['dragleave','drop'].forEach(ev=>dz.addEventListener(ev,e=>{e.preventDefault();dz.classList.remove('drag-over');}));
+dz.addEventListener('drop',e=>{
+  [...e.dataTransfer.files].forEach(f=>{
+    if(f.type.startsWith('image/') && !dt_files.find(x=>x.name===f.name&&x.size===f.size)) dt_files.push(f);
+  });
+  renderPreviews();
+});
+
+form.addEventListener('submit',e=>{
+  if(dt_files.length===0){e.preventDefault();alert('Please select at least one image.');return;}
+  scanSpinner.classList.remove('d-none');
+  document.getElementById('scanTxt').textContent='Scanning…';
+});
+</script>
+{% endblock %}

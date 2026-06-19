@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="row g-3">
+  <div class="col-lg-6">
+    <div class="panel">
+      <div class="panel-head">GENERATE REPORTS</div>
+      <div class="d-grid gap-2 mb-3">
+        <a class="btn btn-cyber" href="{{ url_for('export_pdf') }}">⬇ Full Detection Report (PDF)</a>
+        <a class="btn btn-outline-cyber" href="{{ url_for('export_csv') }}">⬇ Detections CSV</a>
+        <a class="btn btn-outline-cyber" href="{{ url_for('export_xlsx') }}">⬇ Detections Excel</a>
+        <a class="btn btn-outline-cyber" href="{{ url_for('export_criminals_json') }}">⬇ Criminals JSON</a>
+      </div>
+      <hr>
+      <div class="panel-head">DAILY REPORT</div>
+      <p style="color:var(--muted2);font-size:.85rem">Generate today's detection summary as a PDF. If email is configured, it will be sent automatically.</p>
+      <form method="post" action="{{ url_for('generate_report') }}">
+        <button class="btn btn-cyber">📄 Generate Daily Report Now</button>
+      </form>
+    </div>
+  </div>
+  <div class="col-lg-6">
+    <div class="panel">
+      <div class="panel-head">GENERATED REPORTS</div>
+      {% if reports %}
+        <div style="display:flex;flex-direction:column;gap:8px">
+        {% for fn in reports %}
+          <div class="d-flex align-items-center gap-2" style="padding:8px;background:rgba(0,0,0,.2);border-radius:8px;border:1px solid var(--border)">
+            <span style="font-size:1.2rem">📄</span>
+            <span style="flex:1;font-family:'Share Tech Mono',monospace;font-size:.82rem">{{ fn }}</span>
+            <a href="{{ url_for('download_report', fn=fn) }}" class="btn btn-sm btn-outline-cyber">Download</a>
+          </div>
+        {% endfor %}
+        </div>
+      {% else %}
+        <div style="color:var(--muted);text-align:center;padding:30px">No reports generated yet.</div>
+      {% endif %}
+    </div>
+  </div>
+</div>
+{% endblock %}

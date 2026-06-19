@@ -1,0 +1,673 @@
+{% extends "base.html" %}
+{% block content %}
+
+<!-- Header -->
+<div class="d-flex align-items-center gap-3 mb-3 flex-wrap">
+  <div>
+    <h5 class="neon mb-0" style="font-family:'Orbitron',monospace;letter-spacing:2px">🕸 CRIMINAL NETWORK GRAPH</h5>
+    <div style="color:var(--muted2);font-size:.82rem">Association map · co-detections · threat clusters · live links</div>
+  </div>
+  <div class="ms-auto d-flex gap-2 flex-wrap align-items-center">
+    <!-- Search -->
+    <input id="searchInput" type="text" placeholder="Search criminal…"
+      style="background:rgba(255,255,255,.06);border:1px solid var(--border);border-radius:20px;
+             color:var(--text);padding:4px 14px;font-size:.8rem;width:170px;outline:none"
+      oninput="onSearch(this.value)">
+    <button onclick="resetZoom()" class="btn btn-outline-cyber btn-sm">⊙ Reset</button>
+    <button onclick="toggleLabels()" class="btn btn-outline-cyber btn-sm" id="lblBtn">Hide Labels</button>
+    <button onclick="togglePhysics()" class="btn btn-outline-cyber btn-sm" id="physBtn">⏸ Pause</button>
+    <button onclick="exportPNG()" class="btn btn-outline-cyber btn-sm">💾 Export</button>
+  </div>
+</div>
+
+<!-- Filter bar -->
+<div class="d-flex gap-2 mb-3 flex-wrap">
+  <span style="color:var(--muted2);font-size:.78rem;align-self:center">Filter:</span>
+  <button class="net-filter active" id="fAll"    onclick="setFilter('all',this)">All</button>
+  <button class="net-filter"        id="fHigh"   onclick="setFilter('high',this)">🔴 High Threat</button>
+  <button class="net-filter"        id="fMed"    onclick="setFilter('medium',this)">🟠 Medium</button>
+  <button class="net-filter"        id="fLow"    onclick="setFilter('low',this)">🟡 Low</button>
+  <button class="net-filter"        id="fPrio"   onclick="setFilter('priority',this)">⚑ Priority</button>
+  <button class="net-filter"        id="fLinked" onclick="setFilter('linked',this)">🔗 Linked Only</button>
+</div>
+
+<div class="row g-3">
+
+  <!-- Canvas -->
+  <div class="col-lg-8">
+    <div class="panel" style="padding:0;overflow:hidden;position:relative">
+      <canvas id="networkCanvas" style="width:100%;display:block;cursor:grab"></canvas>
+      <!-- Tooltip -->
+      <div id="nodeTooltip" style="display:none;position:absolute;background:rgba(10,14,26,.95);
+        border:1px solid rgba(0,229,255,.3);border-radius:10px;padding:8px 12px;
+        font-size:.78rem;pointer-events:none;z-index:10;max-width:200px"></div>
+    </div>
+  </div>
+
+  <!-- Side panels -->
+  <div class="col-lg-4" style="display:flex;flex-direction:column;gap:12px">
+
+    <!-- Node detail card (shown on click) -->
+    <div id="nodeDetail" class="panel" style="display:none">
+      <div class="panel-head" style="margin-bottom:10px">CRIMINAL PROFILE</div>
+      <div id="nodeDetailBody"></div>
+    </div>
+
+    <!-- Link detail card (shown on edge hover) -->
+    <div id="linkDetail" class="panel" style="display:none">
+      <div class="panel-head" style="margin-bottom:10px">CONNECTION DETAIL</div>
+      <div id="linkDetailBody"></div>
+    </div>
+
+    <!-- Stats -->
+    <div class="panel">
+      <div class="panel-head">NETWORK STATS</div>
+      <div id="netStats" style="font-size:.85rem;color:var(--muted2);line-height:1.9"></div>
+    </div>
+
+    <!-- Strongest links -->
+    <div class="panel" style="flex:1;overflow:hidden">
+      <div class="panel-head">TOP ASSOCIATIONS</div>
+      <div id="linkList" style="font-size:.82rem;overflow-y:auto;max-height:240px"></div>
+    </div>
+
+    <!-- Legend -->
+    <div class="panel">
+      <div class="panel-head">LEGEND</div>
+      <div style="font-size:.8rem;color:var(--muted2);line-height:2.1">
+        <div><span style="display:inline-block;width:12px;height:12px;border-radius:50%;background:#ff1744;margin-right:8px;vertical-align:middle"></span>High threat (8–10)</div>
+        <div><span style="display:inline-block;width:12px;height:12px;border-radius:50%;background:#ff6d00;margin-right:8px;vertical-align:middle"></span>Medium threat (5–7)</div>
+        <div><span style="display:inline-block;width:12px;height:12px;border-radius:50%;background:#ffd740;margin-right:8px;vertical-align:middle"></span>Low threat (1–4)</div>
+        <div><span style="display:inline-block;width:12px;height:12px;border-radius:50%;background:#64748b;margin-right:8px;vertical-align:middle"></span>No score</div>
+        <div style="margin-top:4px;padding-top:4px;border-top:1px solid var(--border)">
+          Double-ring = Priority/Watchlist<br>
+          Thicker line = more co-detections<br>
+          Click node = full profile
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<style>
+.net-filter{background:rgba(255,255,255,.06);border:1px solid var(--border);border-radius:20px;
+  color:var(--muted2);font-size:.75rem;padding:3px 12px;cursor:pointer;font-weight:700;transition:all .15s}
+.net-filter.active,.net-filter:hover{background:rgba(0,229,255,.12);color:var(--cyan);border-color:rgba(0,229,255,.4)}
+.net-filter:nth-child(3).active{background:rgba(255,23,68,.12);color:#ff5252;border-color:rgba(255,23,68,.4)}
+.net-filter:nth-child(4).active{background:rgba(255,109,0,.12);color:#ff6d00;border-color:rgba(255,109,0,.4)}
+.net-filter:nth-child(5).active{background:rgba(255,215,64,.1);color:#ffd740;border-color:rgba(255,215,64,.4)}
+.net-filter:nth-child(6).active{background:rgba(178,0,255,.12);color:var(--purple2);border-color:rgba(178,0,255,.4)}
+.net-filter:nth-child(7).active{background:rgba(0,230,118,.1);color:#00e676;border-color:rgba(0,230,118,.4)}
+.nlink-row{padding:8px 0;border-bottom:1px solid var(--border);cursor:pointer;transition:.12s}
+.nlink-row:hover{background:rgba(0,229,255,.05);padding-left:4px}
+</style>
+
+<script>
+const nodesData = {{ nodes|tojson }};
+const linksData = {{ links|tojson }};
+
+// ── Canvas setup ─────────────────────────────────────────────────────────────
+const canvas = document.getElementById('networkCanvas');
+canvas.width  = canvas.offsetWidth;
+canvas.height = Math.max(520, window.innerHeight - 230);
+const ctx = canvas.getContext('2d');
+
+let showLabels = true, physicsRunning = true;
+let offsetX = 0, offsetY = 0, scale = 1;
+let dragging = false, dragNode = null, lastMX = 0, lastMY = 0;
+let hoveredNode = null, hoveredLink = null, selectedNode = null;
+let activeFilter = 'all', searchQuery = '';
+let simCount = 0;
+
+// ── Node positions & velocities ──────────────────────────────────────────────
+const positions  = {};
+const velocities = {};
+const nodeMap    = {};
+
+nodesData.forEach((n, i) => {
+  const angle = (i / Math.max(nodesData.length, 1)) * Math.PI * 2;
+  const r = Math.min(canvas.width, canvas.height) * 0.32;
+  positions[n.id]  = { x: canvas.width/2 + Math.cos(angle)*r, y: canvas.height/2 + Math.sin(angle)*r };
+  velocities[n.id] = { x: 0, y: 0 };
+  nodeMap[n.id] = n;
+});
+
+// ── Helpers ──────────────────────────────────────────────────────────────────
+function nodeColor(n) {
+  const ts = n.threat_score || 0;
+  if (ts >= 8) return '#ff1744';
+  if (ts >= 5) return '#ff6d00';
+  if (ts >= 2) return '#ffd740';
+  return '#64748b';
+}
+function nodeRadius(n) {
+  const base = 14;
+  const det  = Math.min(n.det_count || 0, 20);
+  return base + (n.threat_score||0)*0.9 + det*0.4;
+}
+
+function isNodeVisible(n) {
+  if (searchQuery) {
+    return n.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+           (n.crime_type||'').toLowerCase().includes(searchQuery.toLowerCase());
+  }
+  switch(activeFilter) {
+    case 'high':     return (n.threat_score||0) >= 8;
+    case 'medium':   return (n.threat_score||0) >= 5 && (n.threat_score||0) < 8;
+    case 'low':      return (n.threat_score||0) < 5 && (n.threat_score||0) > 0;
+    case 'priority': return !!n.priority;
+    case 'linked':   return linksData.some(l => l.criminal_id_a===n.id || l.criminal_id_b===n.id);
+    default: return true;
+  }
+}
+
+// ── Physics simulation ───────────────────────────────────────────────────────
+function simulate() {
+  const REPEL = 9000, DAMP = 0.82, K = 0.00018;
+  nodesData.forEach(a => {
+    if (!isNodeVisible(a)) return;
+    nodesData.forEach(b => {
+      if (a.id === b.id || !isNodeVisible(b)) return;
+      const pa = positions[a.id], pb = positions[b.id];
+      const dx = pa.x - pb.x, dy = pa.y - pb.y;
+      const dist = Math.sqrt(dx*dx + dy*dy) || 1;
+      const force = REPEL / (dist*dist);
+      velocities[a.id].x += (dx/dist)*force;
+      velocities[a.id].y += (dy/dist)*force;
+    });
+  });
+  linksData.forEach(l => {
+    const pa = positions[l.criminal_id_a], pb = positions[l.criminal_id_b];
+    if (!pa || !pb) return;
+    if (!isNodeVisible(nodeMap[l.criminal_id_a]) || !isNodeVisible(nodeMap[l.criminal_id_b])) return;
+    const dx = pb.x-pa.x, dy = pb.y-pa.y;
+    const dist = Math.sqrt(dx*dx+dy*dy) || 1;
+    const ideal = 160;
+    const force = (dist - ideal) * K * Math.sqrt(l.co_detections);
+    velocities[l.criminal_id_a].x += (dx/dist)*force;
+    velocities[l.criminal_id_a].y += (dy/dist)*force;
+    velocities[l.criminal_id_b].x -= (dx/dist)*force;
+    velocities[l.criminal_id_b].y -= (dy/dist)*force;
+  });
+  nodesData.forEach(n => {
+    const p = positions[n.id];
+    velocities[n.id].x += (canvas.width/2  - p.x) * 0.00004;
+    velocities[n.id].y += (canvas.height/2 - p.y) * 0.00004;
+    velocities[n.id].x *= DAMP;
+    velocities[n.id].y *= DAMP;
+    p.x += velocities[n.id].x;
+    p.y += velocities[n.id].y;
+    p.x = Math.max(50, Math.min(canvas.width-50,  p.x));
+    p.y = Math.max(50, Math.min(canvas.height-50, p.y));
+  });
+}
+
+// ── Draw ─────────────────────────────────────────────────────────────────────
+function draw() {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  ctx.save();
+  ctx.translate(offsetX, offsetY);
+  ctx.scale(scale, scale);
+
+  const t = Date.now() / 1000;
+
+  // ── Edges ──
+  linksData.forEach(l => {
+    const pa = positions[l.criminal_id_a], pb = positions[l.criminal_id_b];
+    if (!pa || !pb) return;
+    const na = nodeMap[l.criminal_id_a], nb = nodeMap[l.criminal_id_b];
+    if (!isNodeVisible(na) || !isNodeVisible(nb)) return;
+
+    const isHovered = hoveredLink === l;
+    const isRelated = selectedNode &&
+      (l.criminal_id_a === selectedNode.id || l.criminal_id_b === selectedNode.id);
+
+    const alpha = isHovered ? 0.95 : isRelated ? 0.75 : Math.min(0.65, 0.1 + l.co_detections*0.12);
+    const lw    = isHovered ? 3.5 : (1 + l.co_detections * 0.45);
+
+    // Animated dash for hovered edge
+    ctx.beginPath();
+    ctx.moveTo(pa.x, pa.y);
+    ctx.lineTo(pb.x, pb.y);
+    if (isHovered) {
+      ctx.setLineDash([8, 5]);
+      ctx.lineDashOffset = -t * 20;
+    } else {
+      ctx.setLineDash([]);
+    }
+    ctx.strokeStyle = isHovered ? `rgba(255,215,64,${alpha})` : `rgba(0,229,255,${alpha})`;
+    ctx.lineWidth = lw;
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    // Co-detection badge on midpoint
+    const mx = (pa.x+pb.x)/2, my = (pa.y+pb.y)/2;
+    const badge = `×${l.co_detections}`;
+    ctx.font = isHovered ? 'bold 11px Share Tech Mono' : '9px Share Tech Mono';
+    const bw = ctx.measureText(badge).width + 8;
+    ctx.fillStyle = isHovered ? 'rgba(255,215,64,.25)' : 'rgba(0,0,0,.55)';
+    ctx.beginPath();
+    ctx.roundRect(mx - bw/2, my - 8, bw, 14, 4);
+    ctx.fill();
+    ctx.fillStyle = isHovered ? '#ffd740' : 'rgba(0,229,255,.7)';
+    ctx.textAlign = 'center';
+    ctx.fillText(badge, mx, my + 2);
+  });
+
+  // ── Nodes ──
+  nodesData.forEach(n => {
+    if (!isNodeVisible(n)) return;
+    const p = positions[n.id];
+    const r = nodeRadius(n);
+    const color = nodeColor(n);
+    const isHov = hoveredNode === n;
+    const isSel = selectedNode === n;
+
+    // Glow for hovered/selected
+    if (isHov || isSel) {
+      const grd = ctx.createRadialGradient(p.x, p.y, r*0.5, p.x, p.y, r*2.5);
+      grd.addColorStop(0, color + '55');
+      grd.addColorStop(1, color + '00');
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, r*2.5, 0, Math.PI*2);
+      ctx.fillStyle = grd;
+      ctx.fill();
+    }
+
+    // Priority outer ring with pulse
+    if (n.priority) {
+      const pulse = r + 5 + Math.sin(t * 3) * 2;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, pulse, 0, Math.PI*2);
+      ctx.strokeStyle = '#ff1744';
+      ctx.lineWidth = 2.5;
+      ctx.setLineDash([4, 3]);
+      ctx.stroke();
+      ctx.setLineDash([]);
+    }
+
+    // Main circle
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, r, 0, Math.PI*2);
+    const grad = ctx.createRadialGradient(p.x - r*0.3, p.y - r*0.3, 0, p.x, p.y, r);
+    grad.addColorStop(0, color + 'cc');
+    grad.addColorStop(1, color + '44');
+    ctx.fillStyle = grad;
+    ctx.fill();
+    ctx.strokeStyle = isSel ? '#fff' : color;
+    ctx.lineWidth = isSel ? 3 : (isHov ? 2.5 : 1.8);
+    ctx.stroke();
+
+    // Threat score inside
+    ctx.fillStyle = '#fff';
+    const fSize = Math.max(9, Math.min(r*0.55, 16));
+    ctx.font = `bold ${fSize}px Orbitron`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText((n.threat_score||0).toFixed(0), p.x, p.y);
+
+    // Detection count badge (top-right)
+    if ((n.det_count||0) > 0) {
+      const bx = p.x + r * 0.7, by = p.y - r * 0.7;
+      ctx.beginPath();
+      ctx.arc(bx, by, 8, 0, Math.PI*2);
+      ctx.fillStyle = '#00e676';
+      ctx.fill();
+      ctx.fillStyle = '#000';
+      ctx.font = 'bold 8px Exo 2';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(Math.min(n.det_count, 99), bx, by);
+    }
+
+    // Label
+    if (showLabels) {
+      const label = n.name.length > 15 ? n.name.slice(0, 14) + '…' : n.name;
+      ctx.fillStyle = isSel ? '#fff' : isHov ? '#e2e8f0' : '#94a3b8';
+      ctx.font = isSel ? 'bold 12px Exo 2' : '11px Exo 2';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'top';
+      ctx.fillText(label, p.x, p.y + r + 5);
+
+      // Crime type sub-label on selected
+      if (isSel && n.crime_type) {
+        ctx.fillStyle = nodeColor(n);
+        ctx.font = '9px Share Tech Mono';
+        ctx.fillText(n.crime_type.slice(0,18), p.x, p.y + r + 19);
+      }
+    }
+
+    ctx.textBaseline = 'alphabetic';
+  });
+
+  ctx.restore();
+}
+
+// ── Animation loop ───────────────────────────────────────────────────────────
+function loop() {
+  if (physicsRunning && simCount < 600) { simulate(); simCount++; }
+  draw();
+  requestAnimationFrame(loop);
+}
+loop();
+
+// ── Mouse helpers ─────────────────────────────────────────────────────────────
+function canvasToWorld(cx, cy) {
+  return { x: (cx - offsetX) / scale, y: (cy - offsetY) / scale };
+}
+function getNodeAt(wx, wy) {
+  let best = null, bestD = Infinity;
+  nodesData.forEach(n => {
+    if (!isNodeVisible(n)) return;
+    const p = positions[n.id];
+    const r = nodeRadius(n);
+    const d = Math.hypot(wx - p.x, wy - p.y);
+    if (d <= r && d < bestD) { best = n; bestD = d; }
+  });
+  return best;
+}
+function getLinkAt(wx, wy) {
+  let best = null, bestD = Infinity;
+  linksData.forEach(l => {
+    const pa = positions[l.criminal_id_a], pb = positions[l.criminal_id_b];
+    if (!pa || !pb) return;
+    if (!isNodeVisible(nodeMap[l.criminal_id_a]) || !isNodeVisible(nodeMap[l.criminal_id_b])) return;
+    // Distance from point to segment
+    const dx = pb.x-pa.x, dy = pb.y-pa.y;
+    const t  = Math.max(0, Math.min(1, ((wx-pa.x)*dx + (wy-pa.y)*dy) / (dx*dx+dy*dy||1)));
+    const nx = pa.x + t*dx - wx, ny = pa.y + t*dy - wy;
+    const d  = Math.hypot(nx, ny);
+    if (d < 12 && d < bestD) { best = l; bestD = d; }
+  });
+  return best;
+}
+
+// ── Tooltip ──────────────────────────────────────────────────────────────────
+const tooltip = document.getElementById('nodeTooltip');
+function showTooltip(n, cx, cy) {
+  const color = nodeColor(n);
+  tooltip.innerHTML = `<b style="color:${color}">${n.name}</b><br>
+    <span style="color:var(--muted2)">${n.crime_type||'Unknown'}</span><br>
+    Threat: <b style="color:${color}">${(n.threat_score||0).toFixed(1)}</b>
+    &nbsp;|&nbsp; Detections: <b style="color:#00e676">${n.det_count||0}</b>
+    ${n.status?`<br>Status: <span style="color:#ffd740">${n.status}</span>`:''}`;
+  tooltip.style.display = 'block';
+  tooltip.style.left = (cx + 12) + 'px';
+  tooltip.style.top  = (cy - 10) + 'px';
+}
+function hideTooltip() { tooltip.style.display = 'none'; }
+
+// ── Node detail panel ─────────────────────────────────────────────────────────
+function showNodeDetail(n) {
+  selectedNode = n;
+  const color = nodeColor(n);
+  const ts = n.threat_score || 0;
+  const snap = n.mugshot
+    ? `<img src="/file/by_rel?p=${encodeURIComponent(n.mugshot)}"
+        style="width:100%;height:130px;object-fit:cover;border-radius:10px;
+               border:2px solid ${color};margin-bottom:10px"
+        onerror="this.style.display='none'">`
+    : `<div style="height:70px;background:rgba(255,255,255,.03);border-radius:10px;
+        display:flex;align-items:center;justify-content:center;font-size:28px;margin-bottom:10px">👤</div>`;
+
+  const links = linksData.filter(l => l.criminal_id_a===n.id || l.criminal_id_b===n.id);
+
+  document.getElementById('nodeDetailBody').innerHTML = `
+    ${snap}
+    <div style="font-size:1.05rem;font-weight:700;color:${color};margin-bottom:6px;
+                font-family:'Orbitron',monospace">${n.name}</div>
+    <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px">
+      <span style="background:rgba(255,23,68,.15);border:1px solid rgba(255,23,68,.4);
+        border-radius:20px;color:#ff5252;font-size:.68rem;font-weight:700;padding:2px 8px">
+        ${n.status||'Wanted'}
+      </span>
+      ${n.priority?`<span style="background:rgba(178,0,255,.15);border:1px solid rgba(178,0,255,.4);
+        border-radius:20px;color:var(--purple2);font-size:.68rem;font-weight:700;padding:2px 8px">⚑ Priority</span>`:''}
+    </div>
+    <table style="width:100%;border-collapse:collapse;font-size:.79rem;margin-bottom:10px">
+      <tr><td style="color:var(--muted2);padding:3px 6px 3px 0;text-transform:uppercase;font-size:.65rem;letter-spacing:1px">Crime</td>
+          <td style="color:var(--amber);font-weight:600">${n.crime_type||'—'}</td></tr>
+      <tr><td style="color:var(--muted2);padding:3px 6px 3px 0;text-transform:uppercase;font-size:.65rem;letter-spacing:1px">Threat</td>
+          <td><span style="color:${color};font-weight:700;font-size:1.05rem">${ts.toFixed(1)}</span>/10</td></tr>
+      <tr><td style="color:var(--muted2);padding:3px 6px 3px 0;text-transform:uppercase;font-size:.65rem;letter-spacing:1px">Detections</td>
+          <td style="color:#00e676;font-weight:600">${n.det_count||0}</td></tr>
+      <tr><td style="color:var(--muted2);padding:3px 6px 3px 0;text-transform:uppercase;font-size:.65rem;letter-spacing:1px">CNIC</td>
+          <td style="font-family:monospace">${n.cnic||'—'}</td></tr>
+      <tr><td style="color:var(--muted2);padding:3px 6px 3px 0;text-transform:uppercase;font-size:.65rem;letter-spacing:1px">Nationality</td>
+          <td>${n.nationality||'—'}</td></tr>
+      <tr><td style="color:var(--muted2);padding:3px 6px 3px 0;text-transform:uppercase;font-size:.65rem;letter-spacing:1px">Last Seen</td>
+          <td style="font-family:monospace;font-size:.72rem">${n.last_seen ? n.last_seen.slice(0,16) : '—'}</td></tr>
+      ${n.notes?`<tr><td colspan="2" style="color:var(--muted2);font-size:.72rem;padding-top:4px;border-top:1px solid var(--border)">
+        ${n.notes.slice(0,100)}${n.notes.length>100?'…':''}</td></tr>`:''}
+    </table>
+    ${links.length?`<div style="font-size:.72rem;color:var(--muted2);text-transform:uppercase;letter-spacing:1px;margin-bottom:4px">
+      Known Associates (${links.length})</div>
+      <div style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:10px">
+      ${links.map(l=>{
+        const other = l.criminal_id_a===n.id ? {id:l.criminal_id_b,name:l.name_b} : {id:l.criminal_id_a,name:l.name_a};
+        return `<span onclick="focusNode(${other.id})"
+          style="background:rgba(0,229,255,.1);border:1px solid rgba(0,229,255,.3);border-radius:20px;
+          color:var(--cyan);font-size:.7rem;padding:2px 8px;cursor:pointer;white-space:nowrap">
+          ${other.name} ×${l.co_detections}
+        </span>`;
+      }).join('')}
+      </div>`:''}
+    <div style="display:flex;gap:6px">
+      <a href="/criminals" style="flex:1;text-align:center;background:rgba(255,23,68,.1);
+        border:1px solid rgba(255,23,68,.35);border-radius:8px;color:#ff5252;
+        padding:5px;font-size:.75rem;font-weight:700;text-decoration:none">👤 Profile</a>
+      <a href="/map" style="flex:1;text-align:center;background:rgba(0,229,255,.08);
+        border:1px solid rgba(0,229,255,.3);border-radius:8px;color:#00e5ff;
+        padding:5px;font-size:.75rem;font-weight:700;text-decoration:none">🗺 On Map</a>
+    </div>`;
+
+  document.getElementById('nodeDetail').style.display = 'block';
+  document.getElementById('linkDetail').style.display = 'none';
+}
+
+// ── Link detail panel ─────────────────────────────────────────────────────────
+function showLinkDetail(l) {
+  const body = document.getElementById('linkDetailBody');
+  body.innerHTML = `
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;flex-wrap:wrap">
+      <span style="color:#ff5252;font-weight:700">${l.name_a}</span>
+      <span style="color:var(--cyan);font-size:.8rem">↔</span>
+      <span style="color:#ff5252;font-weight:700">${l.name_b}</span>
+    </div>
+    <table style="width:100%;border-collapse:collapse;font-size:.8rem">
+      <tr><td style="color:var(--muted2);padding:3px 0;font-size:.7rem;text-transform:uppercase;letter-spacing:1px">Co-detections</td>
+          <td><b style="color:#ffd740;font-size:1.1rem">${l.co_detections}</b></td></tr>
+      <tr><td style="color:var(--muted2);padding:3px 0;font-size:.7rem;text-transform:uppercase;letter-spacing:1px">Last Together</td>
+          <td style="font-family:monospace;font-size:.72rem">${l.last_together ? l.last_together.slice(0,16) : '—'}</td></tr>
+      <tr><td style="color:var(--muted2);padding:3px 0;font-size:.7rem;text-transform:uppercase;letter-spacing:1px">Threat A</td>
+          <td style="color:#ff6d00">${(l.ts_a||0).toFixed(1)}</td></tr>
+      <tr><td style="color:var(--muted2);padding:3px 0;font-size:.7rem;text-transform:uppercase;letter-spacing:1px">Threat B</td>
+          <td style="color:#ff6d00">${(l.ts_b||0).toFixed(1)}</td></tr>
+      <tr><td style="color:var(--muted2);padding:3px 0;font-size:.7rem;text-transform:uppercase;letter-spacing:1px">Crime A</td>
+          <td style="color:var(--amber)">${l.crime_a||'—'}</td></tr>
+      <tr><td style="color:var(--muted2);padding:3px 0;font-size:.7rem;text-transform:uppercase;letter-spacing:1px">Crime B</td>
+          <td style="color:var(--amber)">${l.crime_b||'—'}</td></tr>
+    </table>
+    <div style="margin-top:10px;padding:8px;background:rgba(255,215,64,.06);border-radius:8px;
+      border:1px solid rgba(255,215,64,.2);font-size:.78rem;color:var(--muted2)">
+      ⚠ These two individuals were detected together <b style="color:#ffd740">${l.co_detections}</b> time${l.co_detections!==1?'s':''}.
+      Consider joint surveillance.
+    </div>`;
+  document.getElementById('linkDetail').style.display = 'block';
+  document.getElementById('nodeDetail').style.display = 'none';
+}
+
+function focusNode(id) {
+  const n = nodeMap[id];
+  if (!n) return;
+  const p = positions[id];
+  offsetX = canvas.width/2  - p.x * scale;
+  offsetY = canvas.height/2 - p.y * scale;
+  showNodeDetail(n);
+}
+window.focusNode = focusNode;
+
+// ── Canvas events ─────────────────────────────────────────────────────────────
+canvas.addEventListener('mousemove', e => {
+  const rect = canvas.getBoundingClientRect();
+  const cx = e.clientX - rect.left;
+  const cy = e.clientY - rect.top;
+  const { x: wx, y: wy } = canvasToWorld(cx, cy);
+
+  if (dragging && dragNode) {
+    positions[dragNode.id].x = wx;
+    positions[dragNode.id].y = wy;
+    velocities[dragNode.id] = { x: 0, y: 0 };
+    return;
+  }
+  if (dragging) {
+    offsetX += e.clientX - lastMX;
+    offsetY += e.clientY - lastMY;
+    lastMX = e.clientX; lastMY = e.clientY;
+    return;
+  }
+
+  const n = getNodeAt(wx, wy);
+  const l = n ? null : getLinkAt(wx, wy);
+
+  hoveredNode = n;
+  hoveredLink = l;
+
+  if (n) {
+    canvas.style.cursor = 'pointer';
+    showTooltip(n, cx, cy);
+    if (l) showLinkDetail(l);
+  } else if (l) {
+    canvas.style.cursor = 'pointer';
+    showTooltip(nodeMap[l.criminal_id_a], cx, cy);
+  } else {
+    canvas.style.cursor = 'grab';
+    hideTooltip();
+  }
+});
+
+canvas.addEventListener('mousedown', e => {
+  dragging = true;
+  lastMX = e.clientX; lastMY = e.clientY;
+  const rect = canvas.getBoundingClientRect();
+  const { x: wx, y: wy } = canvasToWorld(e.clientX - rect.left, e.clientY - rect.top);
+  dragNode = getNodeAt(wx, wy);
+  if (dragNode) canvas.style.cursor = 'grabbing';
+});
+
+canvas.addEventListener('mouseup', e => {
+  const rect = canvas.getBoundingClientRect();
+  const { x: wx, y: wy } = canvasToWorld(e.clientX - rect.left, e.clientY - rect.top);
+  const n = getNodeAt(wx, wy);
+  const l = n ? null : getLinkAt(wx, wy);
+
+  if (!dragging || (Math.abs(e.clientX-lastMX) < 5 && Math.abs(e.clientY-lastMY) < 5)) {
+    if (n) showNodeDetail(n);
+    else if (l) showLinkDetail(l);
+    else { selectedNode = null; document.getElementById('nodeDetail').style.display='none'; }
+  }
+  dragging = false; dragNode = null;
+  canvas.style.cursor = 'grab';
+});
+
+canvas.addEventListener('wheel', e => {
+  e.preventDefault();
+  const rect = canvas.getBoundingClientRect();
+  const cx = e.clientX - rect.left, cy = e.clientY - rect.top;
+  const delta = e.deltaY > 0 ? 0.88 : 1.14;
+  const newScale = Math.max(0.25, Math.min(4, scale*delta));
+  offsetX = cx - (cx - offsetX) * (newScale/scale);
+  offsetY = cy - (cy - offsetY) * (newScale/scale);
+  scale = newScale;
+}, { passive: false });
+
+canvas.addEventListener('dblclick', e => {
+  const rect = canvas.getBoundingClientRect();
+  const { x: wx, y: wy } = canvasToWorld(e.clientX - rect.left, e.clientY - rect.top);
+  const n = getNodeAt(wx, wy);
+  if (n) { scale = Math.min(scale*1.6, 4); offsetX = canvas.width/2 - positions[n.id].x*scale; offsetY = canvas.height/2 - positions[n.id].y*scale; }
+});
+
+canvas.addEventListener('mouseleave', () => { dragging = false; dragNode = null; hideTooltip(); hoveredNode = null; hoveredLink = null; });
+
+// ── Controls ──────────────────────────────────────────────────────────────────
+function resetZoom() { offsetX=0; offsetY=0; scale=1; simCount=0; physicsRunning=true; }
+function toggleLabels() {
+  showLabels = !showLabels;
+  document.getElementById('lblBtn').textContent = showLabels ? 'Hide Labels' : 'Show Labels';
+}
+function togglePhysics() {
+  physicsRunning = !physicsRunning;
+  document.getElementById('physBtn').textContent = physicsRunning ? '⏸ Pause' : '▶ Resume';
+}
+function setFilter(f, btn) {
+  activeFilter = f;
+  document.querySelectorAll('.net-filter').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  simCount = 0;
+  selectedNode = null;
+  document.getElementById('nodeDetail').style.display = 'none';
+}
+function onSearch(q) {
+  searchQuery = q;
+  simCount = 0;
+  selectedNode = null;
+  document.getElementById('nodeDetail').style.display = 'none';
+}
+function exportPNG() {
+  const link = document.createElement('a');
+  link.download = `nexus_network_${Date.now()}.png`;
+  link.href = canvas.toDataURL('image/png');
+  link.click();
+}
+window.addEventListener('resize', () => { canvas.width = canvas.offsetWidth; });
+
+// ── Sidebar stats & links ─────────────────────────────────────────────────────
+const totalCodet = linksData.reduce((a,l) => a + l.co_detections, 0);
+const highThreat = nodesData.filter(n => (n.threat_score||0) >= 8).length;
+const totalDet   = nodesData.reduce((a,n) => a + (n.det_count||0), 0);
+const isolated   = nodesData.filter(n => !linksData.some(l => l.criminal_id_a===n.id || l.criminal_id_b===n.id)).length;
+
+document.getElementById('netStats').innerHTML = `
+  <div>Criminals: <b style="color:var(--cyan)">${nodesData.length}</b></div>
+  <div>Associations: <b style="color:var(--cyan)">${linksData.length}</b></div>
+  <div>Total co-detections: <b style="color:var(--amber)">${totalCodet}</b></div>
+  <div>High threat nodes: <b style="color:#ff1744">${highThreat}</b></div>
+  <div>Total detections: <b style="color:#00e676">${totalDet}</b></div>
+  <div>Isolated (no links): <b style="color:var(--muted2)">${isolated}</b></div>`;
+
+const ll = document.getElementById('linkList');
+if (linksData.length === 0) {
+  ll.innerHTML = `<div style="color:var(--muted);font-size:.82rem;padding:10px 0">
+    No associations yet. Co-detections are recorded when multiple<br>criminals appear in the same scan.</div>`;
+} else {
+  ll.innerHTML = linksData.slice(0, 15).map((l, i) => `
+    <div class="nlink-row" onclick="showLinkAndFocus(${l.criminal_id_a},${l.criminal_id_b})">
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <div>
+          <span style="color:#ff5252;font-weight:600;font-size:.8rem">${l.name_a}</span>
+          <span style="color:var(--muted2);margin:0 4px;font-size:.75rem">↔</span>
+          <span style="color:#ff5252;font-weight:600;font-size:.8rem">${l.name_b}</span>
+        </div>
+        <span style="background:rgba(255,215,64,.12);border:1px solid rgba(255,215,64,.3);
+          border-radius:20px;color:#ffd740;font-size:.68rem;font-weight:700;padding:1px 7px;flex-shrink:0">
+          ×${l.co_detections}
+        </span>
+      </div>
+      <div style="font-size:.7rem;color:var(--muted2);margin-top:2px">
+        ${l.crime_a||'—'} · ${l.crime_b||'—'}
+      </div>
+    </div>`).join('');
+}
+
+function showLinkAndFocus(idA, idB) {
+  const l = linksData.find(x => x.criminal_id_a===idA && x.criminal_id_b===idB);
+  if (l) showLinkDetail(l);
+  focusNode(idA);
+}
+window.showLinkAndFocus = showLinkAndFocus;
+</script>
+{% endblock %}

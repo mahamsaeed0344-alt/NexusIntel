@@ -1,0 +1,84 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="row g-3">
+  <div class="col-lg-8">
+    <div class="panel">
+      <div class="panel-head">USER MANAGEMENT</div>
+      <div class="table-responsive">
+        <table class="table table-dark table-hover align-middle">
+          <thead><tr><th>ID</th><th>Username</th><th>Role</th><th>Email</th><th>Status</th><th>Created</th><th></th></tr></thead>
+          <tbody>
+          {% for r in rows %}
+            <tr>
+              <td style="color:var(--muted);font-family:'Share Tech Mono',monospace">#{{ r.id }}</td>
+              <td><b>{{ r.username }}</b></td>
+              <td>
+                {% if r.username != 'admin' %}
+                <form method="post" action="{{ url_for('user_role', uid=r.id) }}" style="margin:0">
+                  <select class="form-select form-select-sm" name="role" onchange="this.form.submit()" style="width:100px;background:var(--panel);border-color:var(--border);color:var(--text)">
+                    <option value="admin" {{ 'selected' if r.role=='admin' }}>Admin</option>
+                    <option value="viewer" {{ 'selected' if r.role=='viewer' }}>Viewer</option>
+                  </select>
+                </form>
+                {% else %}
+                  <span class="badge-cyber">admin</span>
+                {% endif %}
+              </td>
+              <td style="color:var(--muted2);font-size:.85rem">{{ r.email or '—' }}</td>
+              <td>
+                {% if r.active %}
+                  <span class="badge-green">Active</span>
+                {% else %}
+                  <span class="badge-red">Disabled</span>
+                {% endif %}
+              </td>
+              <td style="color:var(--muted2);font-size:.8rem">{{ r.created_at[:10] }}</td>
+              <td class="text-end">
+                {% if r.username != 'admin' %}
+                <form method="post" action="{{ url_for('user_toggle', uid=r.id) }}" class="d-inline" style="margin:0">
+                  <button class="btn btn-sm btn-outline-cyber">{{ 'Disable' if r.active else 'Enable' }}</button>
+                </form>
+                <form method="post" action="{{ url_for('user_delete', uid=r.id) }}" class="d-inline" onsubmit="return confirm('Delete user?')" style="margin:0">
+                  <button class="btn btn-sm" style="color:var(--red2);border:1px solid rgba(255,82,82,.3);border-radius:6px;font-size:.78rem;font-weight:700;padding:3px 10px">Del</button>
+                </form>
+                {% endif %}
+              </td>
+            </tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+  <div class="col-lg-4">
+    <div class="panel">
+      <div class="panel-head">ADD NEW USER</div>
+      <form method="post" action="{{ url_for('user_add') }}">
+        <div class="mb-2"><label>Username</label><input class="form-control" name="username" required></div>
+        <div class="mb-2"><label>Password (min 6)</label><input class="form-control" type="password" name="password" required></div>
+        <div class="mb-2"><label>Email (optional)</label><input class="form-control" type="email" name="email"></div>
+        <div class="mb-3"><label>Role</label>
+          <select class="form-select" name="role">
+            <option value="viewer">Viewer (read-only)</option>
+            <option value="admin">Admin (full access)</option>
+          </select>
+        </div>
+        <button class="btn btn-cyber w-100">Create User</button>
+      </form>
+      <hr>
+      <div style="color:var(--muted2);font-size:.82rem">
+        <b style="color:var(--cyan)">Viewer</b> — can view all data, run detections, but cannot add/edit criminals or manage users.<br><br>
+        <b style="color:var(--purple2)">Admin</b> — full access including user management, retrain, delete.
+      </div>
+    </div>
+    <div class="panel mt-3">
+      <div class="panel-head">CHANGE MY PASSWORD</div>
+      <form method="post" action="{{ url_for('change_password') }}">
+        <input class="form-control mb-2" type="password" name="old" placeholder="Current password" required>
+        <input class="form-control mb-2" type="password" name="new" placeholder="New password (min 6)" required>
+        <button class="btn btn-cyber w-100">Update</button>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}

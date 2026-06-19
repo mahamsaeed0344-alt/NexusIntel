@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="d-flex align-items-center gap-3 mb-3">
+  <div>
+    <h5 class="neon mb-0" style="font-family:'Orbitron',monospace;letter-spacing:2px">VIDEO SCAN RESULTS</h5>
+    <div style="color:var(--muted2);font-size:.82rem">
+      {{ filename }} — {{ total_frames }} total frames — {{ processed }} frames scanned — {{ detections|length }} detections
+    </div>
+  </div>
+  <a href="{{ url_for('video_page') }}" class="btn btn-outline-cyber ms-auto">Scan Another</a>
+</div>
+
+{% if not detections %}
+<div class="panel" style="text-align:center;padding:50px">
+  <div style="font-size:40px;margin-bottom:12px">🔍</div>
+  <div style="color:var(--muted2)">No faces detected in the scanned frames.</div>
+</div>
+{% else %}
+<div class="snap-grid">
+  {% for d in detections %}
+    {% set conf = d.confidence %}
+    {% set grade = 'high' if conf >= 80 else ('medium' if conf >= 60 else ('low' if conf >= 40 else 'unknown')) %}
+    <div class="snap-card {{ 'hit' if d.criminal_id else 'unknown' }}" style="text-decoration:none">
+      <img src="{{ d.image_url }}" style="width:100%;height:160px;object-fit:cover">
+      <div class="snap-meta">
+        <div class="snap-name {{ 'neon-r' if d.criminal_id else 'neon-a' }}">{{ d.name }}</div>
+        <div class="d-flex align-items-center gap-2 mt-1">
+          <span class="loc-badge {{ grade }}">{{ '%.1f'|format(conf) }}%</span>
+          <span style="color:var(--muted2);font-size:.75rem">Frame {{ d.frame }} @ {{ d.time_sec }}s</span>
+        </div>
+        <div class="conf-bar-wrap mt-2">
+          <div class="conf-bar-track"><div class="conf-bar-fill conf-{{ grade }}" style="width:{{ conf }}%"></div></div>
+        </div>
+      </div>
+    </div>
+  {% endfor %}
+</div>
+{% endif %}
+{% endblock %}
