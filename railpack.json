@@ -4,6 +4,6 @@
   },
   "buildAptPackages": ["cmake", "build-essential"],
   "deploy": {
-    "aptPackages": ["libx11-6"]
+    "aptPackages": ["libx11-6", "libpng16-16"]
   }
 }
