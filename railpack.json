@@ -1,6 +1,4 @@
 {
-  "packages": {
-    "python": "3.12"
-  },
-  "buildAptPackages": ["cmake"]
+  "packages": { "python": "3.12" },
+  "buildAptPackages": ["cmake", "build-essential"]
 }
