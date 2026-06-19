@@ -2,5 +2,8 @@
   "packages": {
     "python": "3.12"
   },
-  "buildAptPackages": ["cmake", "build-essential", "libx11-6"]
+  "buildAptPackages": ["cmake", "build-essential"],
+  "deploy": {
+    "aptPackages": ["libx11-6"]
+  }
 }
